@@ -22,18 +22,22 @@ export function createBattle(battlefield) {
   for (const side of SIDES) {
     const deployed = {};
     const destroyed = {};
+    const adjustments = {};
     for (const nation of nationsFor(battlefield)) {
       if (ALLIANCE_OF[nation.id] !== side) continue;
       deployed[nation.id] = {};
       destroyed[nation.id] = {};
+      adjustments[nation.id] = {};
       for (const uid of ids) {
         deployed[nation.id][uid] = 0;
         destroyed[nation.id][uid] = 0;
+        adjustments[nation.id][uid] = 0;
       }
     }
     sides[side] = {
       deployed,
       destroyed,
+      adjustments,
       dice: [],
       groups: [],
       batchPlan: [],

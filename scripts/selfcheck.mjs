@@ -96,6 +96,27 @@ check('取消命中回退骰子与击毁计数', () => {
   if (s.sides.axis.dice.some(d => d.status !== 'pending')) throw new Error('骰子未回退待分配');
 });
 
+// 压力系统（真实数据）
+import { createPressureState, casualtyPoints, casualtyPointsToStress, casualtyStress, totalStress, zoneFor } from '../js/modules/pressure.js';
+
+check('伤亡点数换算边界', () => {
+  if (casualtyPointsToStress(0) !== 0) throw new Error('0 点应为 0 压力');
+  if (casualtyPointsToStress(18) !== 0) throw new Error('18 点应为 0 压力');
+  if (casualtyPointsToStress(19) !== 1) throw new Error('19 点应为 1 压力');
+  if (casualtyPointsToStress(34) !== 1) throw new Error('34 点应为 1 压力');
+  if (casualtyPointsToStress(35) !== 2) throw new Error('35 点应为 2 压力');
+  if (casualtyPointsToStress(109) !== 6) throw new Error('109 点应为 6 压力');
+});
+
+check('压力：伤亡点数与 Zone', () => {
+  const p = createPressureState();
+  p.roundCasualties.germany.infantry = 10; // 10×2=20 伤亡点 → 1 压力
+  if (casualtyPoints(p, 'germany') !== 20) throw new Error('伤亡点数应为 20');
+  if (casualtyStress(p, 'germany') !== 1) throw new Error('击杀分压力应为 1');
+  if (totalStress(p, 'germany') !== 1) throw new Error('总压力应为 1');
+  if (zoneFor(p, 'germany') !== 0) throw new Error('德国阈值 6，1 压力应仍在白区');
+});
+
 if (failures > 0) {
   console.error(failures + ' 项自检失败');
   process.exitCode = 1;

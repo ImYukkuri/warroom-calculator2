@@ -41,13 +41,13 @@
         <button data-phase="settle" type="button">结算</button>
       </nav>
       <button class="btn btn-primary" id="primary-action" type="button">进入空战阶段</button>
-      <button class="btn" id="revert-settle" type="button" data-action="revert-settle" hidden>回退结算修改</button>
-      <button class="btn" id="submit-casualties" type="button" data-action="submit-casualties" hidden>提交战损</button>
+
     </div>
   </header>
 
   <main class="app-main">
-    <div class="battlefield" id="battle-view">
+    <div id="battle-view">
+    <div class="battlefield">
     <section class="side side-axis" data-side="axis">
       <header class="side-head">
         <h2>轴心</h2>
@@ -75,6 +75,8 @@
       <div class="dice-area" id="allied-dice"></div>
       <div class="grid-area" id="allied-grid"></div>
     </section>
+    </div>
+    <section class="settle-view" id="settle-view" hidden></section>
     </div>
 
     <section class="pressure-view" id="pressure-view" hidden></section>

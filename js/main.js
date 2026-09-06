@@ -3,7 +3,9 @@ import {
   UNIT_META, nationsFor, unitIdsFor,
 } from './data/rules-data.js';
 import {
-  ZONES, addCasualties, adjustZone, applyCasualtyStress, createPressureState, spendToCancel,
+  CASUALTY_FACTORS, NATION_STRESS_THRESHOLDS,
+  ZONES, ZONE_EFFECTS, addCasualties, adjustScore, casualtyPoints, casualtyStress,
+  createPressureState, newRound, roundCasualtyOverview, thisRoundAdded, totalStress, zoneFor,
 } from './modules/pressure.js';
 import {
   autoAssign, cancelGroup, createBattle, diceCountFor, forceAdvantage, isDisadvantaged,
@@ -18,6 +20,8 @@ let currentCell = null;     // { side, nation, unit }
 let selectedDieId = null;   // 手动阶段选中的待分配骰子
 let viewMode = 'battle';
 let pressure = loadPressure() || createPressureState();
+if (!pressure.log) pressure.log = [];
+if (!pressure.adjustmentLog) pressure.adjustmentLog = [];
 
 function clone(v) { return structuredClone(v); }
 
@@ -33,7 +37,18 @@ function save() {
 function loadPressure() {
   try {
     const raw = localStorage.getItem('warroom.pressure.v1');
-    return raw ? JSON.parse(raw) : null;
+    if (!raw) return null;
+    const old = JSON.parse(raw);
+    // 旧 demo schema 迁移：nations 里是 stress/medals/civilianGoods
+    if (old.nations && old.nations.germany && 'stress' in old.nations.germany) {
+      const p = createPressureState();
+      if (old.roundCasualties) p.roundCasualties = old.roundCasualties;
+      for (const n of NATIONS) {
+        if (old.nations[n.id]) p.nations[n.id].previousRoundStress = old.nations[n.id].stress || 0;
+      }
+      return p;
+    }
+    return old;
   } catch (e) { return null; }
 }
 function savePressure() {
@@ -120,7 +135,7 @@ function bindGridDelegation() {
       if (!cell) return;
       e.preventDefault();
       const { nation, unit } = cell.dataset;
-      if (state.phase === 'deploy') adjustUnit(side, nation, unit, -1);
+      if (state.phase === 'deploy') { adjustUnit(side, nation, unit, -1); save(); render(); }
       else if (state.phase === 'settle') adjustDestroyed(side, nation, unit, -1);
     });
     area.addEventListener('wheel', (e) => {
@@ -130,7 +145,7 @@ function bindGridDelegation() {
       e.preventDefault();
       const { nation, unit } = cell.dataset;
       const delta = e.deltaY < 0 ? 1 : -1;
-      if (state.phase === 'deploy') adjustUnit(side, nation, unit, delta);
+      if (state.phase === 'deploy') { adjustUnit(side, nation, unit, delta); save(); render(); }
       else if (state.phase === 'settle') adjustDestroyed(side, nation, unit, delta);
     });
   });
@@ -201,7 +216,7 @@ function startAirStage() {
   state.stage = 'air';
   state.phase = 'roll';
   log('空战阶段开始');
-  save(); render();
+  rollCurrentBatches();
 }
 
 function rollCurrentBatches() {
@@ -232,12 +247,13 @@ function startSurfaceStage() {
   state.stage = 'surface';
   state.phase = 'roll';
   log(state.battlefield === 'land' ? '陆面阶段开始' : '海面阶段开始');
-  save(); render();
+  rollCurrentBatches();
 }
 
 function settle() {
   state.settleSnapshot = {
     destroyed: clone({ axis: state.sides.axis.destroyed, allied: state.sides.allied.destroyed }),
+    adjustments: clone({ axis: state.sides.axis.adjustments, allied: state.sides.allied.adjustments }),
     escapedSubs: { axis: state.sides.axis.escapedSubs, allied: state.sides.allied.escapedSubs },
   };
   state.phase = 'settle';
@@ -249,6 +265,7 @@ function revertSettle() {
   if (!state.settleSnapshot) return;
   for (const side of SIDES) {
     state.sides[side].destroyed = clone(state.settleSnapshot.destroyed[side]);
+    state.sides[side].adjustments = clone(state.settleSnapshot.adjustments[side]);
     state.sides[side].escapedSubs = state.settleSnapshot.escapedSubs[side];
   }
   log('已回退结算修改');
@@ -283,16 +300,18 @@ function reassignStage() {
   }
 }
 
-function survivingStrategicBombers() {
+function strategicBombersFor(side) {
   let total = 0;
-  for (const side of SIDES) {
-    for (const n of nationsFor(state.battlefield)) {
-      if (ALLIANCE_OF[n.id] !== side) continue;
-      const s = state.sides[side];
-      total += Math.max(0, (s.deployed[n.id].bomber_strategic || 0) - (s.destroyed[n.id].bomber_strategic || 0));
-    }
+  for (const n of nationsFor(state.battlefield)) {
+    if (ALLIANCE_OF[n.id] !== side) continue;
+    const s = state.sides[side];
+    total += Math.max(0, (s.deployed[n.id].bomber_strategic || 0) - (s.destroyed[n.id].bomber_strategic || 0));
   }
   return total;
+}
+
+function survivingStrategicBombers() {
+  return strategicBombersFor('axis') + strategicBombersFor('allied');
 }
 
 function performStrategicBombing() {
@@ -410,7 +429,15 @@ function render() {
   renderPhaseBar();
   renderPrimaryAction();
   renderSettingsPanel();
-  for (const side of SIDES) renderSide(side);
+  const fieldEl = document.querySelector('#battle-view .battlefield');
+  const settleEl = $('#settle-view');
+  const isSettle = state.phase === 'settle';
+  if (fieldEl) fieldEl.hidden = isSettle;
+  if (settleEl) {
+    settleEl.hidden = !isSettle;
+    if (isSettle) renderSettle();
+  }
+  if (!isSettle) for (const side of SIDES) renderSide(side);
   renderLog();
   save();
 }
@@ -441,15 +468,11 @@ function phaseReached() {
 
 function renderPrimaryAction() {
   const btn = $('#primary-action');
-  const revert = $('#revert-settle');
-  const submit = $('#submit-casualties');
   if (state.phase === 'deploy') btn.textContent = '进入空战阶段';
   else if (state.phase === 'roll') btn.textContent = '掷下一批';
   else if (state.phase === 'manual' && state.stage === 'air') btn.textContent = (state.battlefield === 'land' ? '进入陆面阶段' : '进入海面阶段');
   else if (state.phase === 'manual' && state.stage === 'surface') btn.textContent = '结算';
   else if (state.phase === 'settle') btn.textContent = '开始新战斗';
-  if (revert) revert.hidden = state.phase !== 'settle';
-  if (submit) submit.hidden = !(state.phase === 'settle' && !state.casualtiesSubmitted);
 }
 
 function renderView() {
@@ -463,107 +486,170 @@ function renderView() {
 }
 
 function submitCasualties() {
-  const casualties = {};
+  const field = state.battlefield;
+  const beforeStress = {};
+  for (const n of NATIONS) beforeStress[n.id] = casualtyStress(pressure, n.id);
   for (const side of SIDES) {
-    for (const n of nationsFor(state.battlefield)) {
+    const s = state.sides[side];
+    for (const n of nationsFor(field)) {
       if (ALLIANCE_OF[n.id] !== side) continue;
-      const s = state.sides[side];
-      for (const uid of unitIdsFor(state.battlefield)) {
-        const d = s.destroyed[n.id] ? (s.destroyed[n.id][uid] || 0) : 0;
-        if (d > 0) {
-          casualties[n.id] = casualties[n.id] || {};
-          casualties[n.id][uid] = (casualties[n.id][uid] || 0) + d;
-        }
+      for (const uid of unitIdsFor(field)) {
+        const X = pressure.roundCasualties[n.id][uid] || 0;
+        const Y = s.destroyed[n.id][uid] || 0;
+        const Z = s.adjustments[n.id][uid] || 0;
+        const merged = Math.max(0, X + Y + Z);
+        pressure.roundCasualties[n.id][uid] = merged;
+        if (Z !== 0) pressure.adjustmentLog.push({ round: pressure.round, nation: n.id, unit: uid, z: Z });
+        s.destroyed[n.id][uid] = 0;
+        s.adjustments[n.id][uid] = 0;
       }
     }
   }
-  addCasualties(pressure, casualties);
+  for (const n of NATIONS) {
+    const d = casualtyStress(pressure, n.id) - beforeStress[n.id];
+    if (d !== 0) pressure.log.push({ time: new Date().toLocaleTimeString(), kind: 'casualty', nation: n.id, delta: d, note: '提交战损' });
+  }
   state.casualtiesSubmitted = true;
   savePressure();
   save();
-  log('已提交战损到本回合总计');
+  log('已提交战损：本场 Y+Z 并入本回合累计');
   render();
+}
+
+function renderSettle() {
+  const box = $('#settle-view');
+  if (!box) return;
+  const field = state.battlefield;
+  const nations = nationsFor(field);
+  const units = unitIdsFor(field);
+  let html = '<h3>战斗结算 · 提交战损</h3>';
+  html += '<table class="settle-table"><thead><tr><th>国家</th><th>伤亡点数</th><th>本轮伤亡点数</th>';
+  for (const uid of units) html += '<th>' + UNIT_META[uid].name + '</th>';
+  html += '</tr></thead><tbody>';
+  for (const n of nations) {
+    const side = ALLIANCE_OF[n.id];
+    const s = state.sides[side];
+    let totalPts = 0;
+    let thisBattlePts = 0;
+    const cells = [];
+    for (const uid of units) {
+      const X = pressure.roundCasualties[n.id][uid] || 0;
+      const Y = s.destroyed[n.id][uid] || 0;
+      const Z = s.adjustments[n.id][uid] || 0;
+      const total = Math.max(0, X + Y + Z);
+      const factor = CASUALTY_FACTORS[uid] || 0;
+      totalPts += total * factor;
+      thisBattlePts += Y * factor;
+      cells.push({ uid, total, z: Z, x: X, y: Y });
+    }
+    html += '<tr><td class="nation-cell">' + n.name + '</td>';
+    html += '<td class="readonly">' + totalPts + '</td>';
+    html += '<td class="readonly">' + thisBattlePts + '</td>';
+    for (const c of cells) {
+      const zText = c.z !== 0 ? ' <span class="z">' + (c.z > 0 ? '+' : '') + c.z + '</span>' : '';
+      html += '<td class="settle-unit" data-nation="' + n.id + '" data-unit="' + c.uid + '" title="X' + c.x + ' + Y' + c.y + ' + Z' + c.z + '">' + c.total + zText + '</td>';
+    }
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+  html += '<div class="settle-actions"><button class="btn btn-primary" id="settle-submit" type="button">提交战损</button><button class="btn" id="settle-revert" type="button">回退结算修改</button></div>';
+  box.innerHTML = html;
+  bindSettleEvents(box);
+}
+
+function bindSettleEvents(box) {
+  box.querySelectorAll('.settle-unit').forEach((cell) => {
+    cell.addEventListener('click', () => adjustSettleUnit(cell.dataset.nation, cell.dataset.unit, 1));
+    cell.addEventListener('contextmenu', (e) => { e.preventDefault(); adjustSettleUnit(cell.dataset.nation, cell.dataset.unit, -1); });
+  });
+  const submit = box.querySelector('#settle-submit');
+  if (submit) submit.addEventListener('click', submitCasualties);
+  const revert = box.querySelector('#settle-revert');
+  if (revert) revert.addEventListener('click', revertSettle);
+}
+
+function adjustSettleUnit(nation, unit, delta) {
+  const side = ALLIANCE_OF[nation];
+  const s = state.sides[side];
+  const X = pressure.roundCasualties[nation][unit] || 0;
+  const Y = s.destroyed[nation][unit] || 0;
+  const next = (s.adjustments[nation][unit] || 0) + delta;
+  s.adjustments[nation][unit] = Math.max(-(X + Y), next);
+  save(); render();
 }
 
 function renderPressure() {
   const box = $('#pressure-view');
   if (!box) return;
   if (!pressure || !pressure.nations || !pressure.roundCasualties) pressure = createPressureState();
-  let html = '<div class="pressure-banner">压力系统 DEMO · 占位换算（1 伤亡点 = 1 压力，阈值 = 5）待替换为实体士气板数据</div>';
-  html += '<div class="pressure-columns">';
-  html += renderPressureColumn('轴心', NATIONS.filter((n) => n.alliance === 'axis'));
-  html += renderPressureColumn('同盟', NATIONS.filter((n) => n.alliance === 'allied'));
-  html += '</div>';
-  html += renderRoundCasualties();
+  let html = '<div class="pressure-head"><h3>压力系统</h3><button class="btn" id="new-round" type="button">新回合</button></div>';
+  html += '<table class="pmatrix"><thead><tr><th></th>';
+  for (const n of NATIONS) html += '<th><img src="./assets/' + n.flag + '" alt="">' + n.name + '</th>';
+  html += '</tr></thead><tbody>';
+  const rows = [
+    ['国家名称', (n) => n.name],
+    ['压力阈值', (n) => NATION_STRESS_THRESHOLDS[n.id]],
+    ['总压力值', (n) => totalStress(pressure, n.id)],
+    ['上一轮压力', (n) => pressure.nations[n.id].previousRoundStress],
+    ['本回合新增压力', (n) => thisRoundAdded(pressure, n.id)],
+    ['击杀分压力', (n) => casualtyStress(pressure, n.id)],
+    ['伤亡点数', (n) => casualtyPoints(pressure, n.id)],
+    ['争夺领地分', (n) => pressure.nations[n.id].contestedTerritory],
+    ['勋章/战略物资分', (n) => pressure.nations[n.id].medals],
+  ];
+  for (let r = 0; r < rows.length; r += 1) {
+    html += '<tr><td class="row-label">' + rows[r][0] + '</td>';
+    for (const n of NATIONS) {
+      const value = rows[r][1](n);
+      if (r === 2) {
+        const z = zoneFor(pressure, n.id);
+        html += '<td class="zone-cell zone-' + z + '" data-nation="' + n.id + '" data-zone="' + z + '">' + value + '</td>';
+      } else if (r === 6) {
+        html += '<td class="overview-cell" data-nation="' + n.id + '">' + value + '</td>';
+      } else if (r === 7 || r === 8) {
+        const kind = r === 7 ? 'territory' : 'medals';
+        html += '<td class="editable-cell" data-nation="' + n.id + '" data-kind="' + kind + '">' + value + '</td>';
+      } else {
+        html += '<td>' + value + '</td>';
+      }
+    }
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
   box.innerHTML = html;
   bindPressureEvents(box);
-}
-
-function renderPressureColumn(title, nations) {
-  let h = '<div class="p-column"><h3>' + title + '</h3>';
-  for (const n of nations) {
-    const p = pressure.nations[n.id];
-    h += '<div class="p-card"><div class="p-head"><img src="./assets/' + n.flag + '" alt="">' + n.name + '</div>';
-    h += pRow('压力', p.stress, n.id, 'stress');
-    h += pRow('勋章', p.medals, n.id, 'medals');
-    h += pRow('民用', p.civilianGoods, n.id, 'civilianGoods');
-    h += '<div class="p-row"><span>Zone</span><b>' + ZONES[p.zone] + '</b><button class="mini" data-pn="' + n.id + '" data-act="zone-">−</button><button class="mini" data-pn="' + n.id + '" data-act="zone+">+</button></div>';
-    h += '<div class="p-actions"><button class="btn small" data-pn="' + n.id + '" data-act="spend-medal">勋章抵消1</button><button class="btn small" data-pn="' + n.id + '" data-act="spend-civil">民用抵消1</button></div>';
-    h += '</div>';
-  }
-  h += '</div>';
-  return h;
-}
-
-function pRow(label, value, nationId, key) {
-  return '<div class="p-row"><span>' + label + '</span><b>' + value + '</b><button class="mini" data-pn="' + nationId + '" data-act="' + key + '-">−</button><button class="mini" data-pn="' + nationId + '" data-act="' + key + '+">+</button></div>';
-}
-
-function renderRoundCasualties() {
-  let h = '<div class="p-casualties"><h3>本回合总计损失单位</h3>';
-  let any = false;
-  for (const side of ['axis', 'allied']) {
-    h += '<h4>' + (side === 'axis' ? '轴心' : '同盟') + '</h4><div class="p-cas-list">';
-    for (const n of NATIONS.filter((x) => x.alliance === side)) {
-      const rc = pressure.roundCasualties[n.id] || {};
-      const parts = [];
-      for (const uid of Object.keys(rc)) if (rc[uid] > 0) parts.push(UNIT_META[uid].name + '×' + rc[uid]);
-      if (parts.length) { any = true; h += '<div class="p-cas-item"><span>' + n.name + '</span><span>' + parts.join('、') + '</span></div>'; }
-    }
-    h += '</div>';
-  }
-  if (!any) h += '<p class="muted">暂无战损</p>';
-  h += '<button class="btn btn-primary" id="apply-casualty-stress">按占位表转压力并清空战损</button></div>';
-  return h;
+  renderLog();
 }
 
 function bindPressureEvents(box) {
-  box.querySelectorAll('[data-pn]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const pn = btn.dataset.pn;
-      const act = btn.dataset.act;
-      const nat = pressure.nations[pn];
-      if (act === 'stress-') nat.stress = Math.max(0, nat.stress - 1);
-      else if (act === 'stress+') nat.stress += 1;
-      else if (act === 'medals-') nat.medals = Math.max(0, nat.medals - 1);
-      else if (act === 'medals+') nat.medals += 1;
-      else if (act === 'civilianGoods-') nat.civilianGoods = Math.max(0, nat.civilianGoods - 1);
-      else if (act === 'civilianGoods+') nat.civilianGoods += 1;
-      else if (act === 'zone-') adjustZone(pressure, pn, -1);
-      else if (act === 'zone+') adjustZone(pressure, pn, 1);
-      else if (act === 'spend-medal') spendToCancel(pressure, pn, 'medal');
-      else if (act === 'spend-civil') spendToCancel(pressure, pn, 'civilian');
-      savePressure();
-      renderPressure();
+  box.querySelectorAll('.zone-cell').forEach((cell) => {
+    cell.addEventListener('click', () => {
+      const z = Number(cell.dataset.zone);
+      alert('第 ' + (z + 1) + ' 压力阶段 · ' + ZONES[z] + '：' + ZONE_EFFECTS[z]);
     });
   });
-  const apply = box.querySelector('#apply-casualty-stress');
-  if (apply) apply.addEventListener('click', () => {
-    applyCasualtyStress(pressure);
-    savePressure();
-    log('已按占位表将战损转为压力');
-    renderPressure();
+  box.querySelectorAll('.overview-cell').forEach((cell) => {
+    cell.addEventListener('click', () => {
+      const items = roundCasualtyOverview(pressure, cell.dataset.nation);
+      const lines = items.map((it) => UNIT_META[it.unit].name + '：' + CASUALTY_FACTORS[it.unit] + '×' + it.count + '=' + it.points);
+      alert(lines.length ? lines.join('；') : '本回合暂无损失');
+    });
   });
+  box.querySelectorAll('.editable-cell').forEach((cell) => {
+    cell.addEventListener('click', () => {
+      adjustScore(pressure, cell.dataset.nation, cell.dataset.kind, 1);
+      pressure.log.push({ time: new Date().toLocaleTimeString(), kind: cell.dataset.kind, nation: cell.dataset.nation, delta: 1, note: cell.dataset.kind === 'territory' ? '争夺领地分' : '勋章分' });
+      savePressure(); renderPressure();
+    });
+    cell.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      adjustScore(pressure, cell.dataset.nation, cell.dataset.kind, -1);
+      pressure.log.push({ time: new Date().toLocaleTimeString(), kind: cell.dataset.kind, nation: cell.dataset.nation, delta: -1, note: cell.dataset.kind === 'territory' ? '争夺领地分' : '勋章分' });
+      savePressure(); renderPressure();
+    });
+  });
+  const nr = box.querySelector('#new-round');
+  if (nr) nr.addEventListener('click', () => { newRound(pressure); savePressure(); log('进入新回合'); renderPressure(); });
 }
 
 function renderSide(side) {
@@ -592,25 +678,49 @@ function renderAdvantages(side) {
   $(portId).disabled = state.battlefield !== 'sea';
 }
 
+function counterColor(n) {
+  const k = Math.min(n, 12);
+  const g = 255 - k * 5;
+  const b = 255 - k * 5;
+  return 'rgb(255,' + g + ',' + b + ')';
+}
+
 function renderDice(side) {
   const box = side === 'axis' ? $('#axis-dice') : $('#allied-dice');
   const s = state.sides[side];
   const html = [];
 
-  // 骰子计数器总揽：每种颜色骰子总数，数字大且醒目
+  // 骰子计数器总揽：色块 + 数字（0 灰，>0 白并随数量轻微偏红）
   const counts = { yellow: 0, blue: 0, green: 0, red: 0, black: 0, white: 0 };
   for (const d of s.dice) counts[d.color] = (counts[d.color] || 0) + 1;
   html.push('<div class="dice-counter">');
   for (const c of COLOR_ORDER) {
-    html.push('<div class="counter-item"><span class="counter-swatch" data-color="' + c + '"></span><span class="counter-label">' + COLOR_LABELS[c] + '</span><span class="counter-num">' + (counts[c] || 0) + '</span></div>');
+    const n = counts[c] || 0;
+    const numCls = n === 0 ? 'counter-num zero' : 'counter-num';
+    const numStyle = n > 0 ? ' style="color:' + counterColor(n) + '"' : '';
+    html.push('<div class="counter-item"><span class="counter-swatch" data-color="' + c + '"></span><span class="' + numCls + '"' + numStyle + '>' + n + '</span></div>');
   }
   html.push('</div>');
 
+  // 骰数总览：空战 / 陆海战 / 战略轰炸 分开显示
+  const airCount = diceCountFor(state, side, 'air');
+  const surfaceCount = diceCountFor(state, side, 'surface');
+  const stratCount = state.battlefield === 'land' ? strategicBombersFor(side) * 4 : 0;
+  html.push('<div class="dice-counts">');
+  html.push('<div class="dice-count"><span>空战</span><b>' + airCount + '</b></div>');
+  html.push('<div class="dice-count"><span>' + (state.battlefield === 'land' ? '陆面' : '海面') + '</span><b>' + surfaceCount + '</b></div>');
+  if (state.battlefield === 'land') html.push('<div class="dice-count"><span>战略轰炸</span><b>' + stratCount + '</b></div>');
+  html.push('</div>');
+
   if (state.phase === 'roll' && s.batchPlan.length) {
-    html.push('<span class="hint">应掷 ' + s.batchPlan.join('+') + ' 骰 · 已完成 ' + s.batchesRolled + '/' + s.batchPlan.length + ' 批</span>');
+    html.push('<span class="hint">本阶段应掷 ' + s.batchPlan.join('+') + ' 骰 · 已完成 ' + s.batchesRolled + '/' + s.batchPlan.length + ' 批</span>');
   }
   if (state.strategicBombing && state.strategicBombing[side] && state.strategicBombing[side].length) {
-    html.push('<span class="hint">战略轰炸：' + state.strategicBombing[side].map((c) => COLOR_LABELS[c]).join('·') + '</span>');
+    html.push('<div class="dice-batch"><span class="batch-label">战略轰炸骰</span>');
+    for (const c of state.strategicBombing[side]) {
+      html.push('<span class="die" title="' + COLOR_LABELS[c] + '"><img src="./assets/dice_' + c + '.png" alt="' + COLOR_LABELS[c] + '"></span>');
+    }
+    html.push('</div>');
   }
   // 按批次分行显示，批次之间加分割线
   const batches = [];
@@ -732,7 +842,25 @@ function renderSettingsPanel() {
 
 function renderLog() {
   const list = $('#log-list');
-  list.innerHTML = state.log.slice(-60).map((l) => '<li>' + l + '</li>').join('');
+  const entries = (pressure.log || []).slice(-100).reverse();
+  list.innerHTML = entries.map(function (e) {
+    const cat = logCatLabel(e.kind);
+    const nation = pressureNationName(e.nation);
+    const sign = e.delta >= 0 ? '+' : '';
+    return '<li><span class="log-cat">[' + cat + ']</span> ' + nation + ' ' + sign + e.delta + ' · ' + (e.note || '') + '</li>';
+  }).join('') || '<li class="muted">暂无压力增减</li>';
+}
+
+function logCatLabel(kind) {
+  if (kind === 'territory') return '争夺领地';
+  if (kind === 'medals') return '勋章';
+  if (kind === 'casualty') return '伤亡';
+  return kind || '压力';
+}
+
+function pressureNationName(id) {
+  const n = NATIONS.find((x) => x.id === id);
+  return n ? n.name : id;
 }
 
 // ---------- 工具 ----------
