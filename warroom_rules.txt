@@ -1,0 +1,682 @@
+# War Room Rules — Assistant Reference (Pruned)
+
+Source: War Room 2nd Edition 2025 update OCR text. The full original OCR was backed up as `warroom_rules_original_backup.txt` before pruning.
+
+Purpose of this file: keep only rules useful for the War Room Assistant project: Battle Board mapping, unit entry, dice/combat resolution, raids, battle cleanup, medals/stress, and quick battle reference.
+
+Removed intentionally: premise/flavor text, component inventory details not relevant to the app, setup instructions, scenario setup and scenario victory text, detailed movement examples, production/trade economy rules, advanced optional rules, nano-expansion, designer notes, credits, index, and other prose that does not help implement the assistant.
+
+---
+
+## 1. Project-Relevant Battle Board Assets
+
+### `land.jpg` visual layout notes
+
+Land Battle Board uses Axis on the left, Allied on the right. The background image must be shown whole and scaled proportionally; app overlay hot zones should use percentage coordinates, not fixed pixels.
+
+Visible row/stance labels to map and verify:
+
+- Air area:
+  - Bomber — Strategic / Air-Ground style stance label visible.
+  - Fighter — Air-Ground style stance label visible.
+- Land area:
+  - Armor — Defensive / Offensive.
+  - Artillery — Anti-Air / Ground.
+  - Infantry — Defensive / Offensive.
+- Board center shows Air-vs-Land combat value columns and Force Advantage reminders.
+- Outer columns show Damaged / Eliminated tracks.
+
+### `sea.png` visual layout notes
+
+Sea Battle Board uses Axis on the left, Allied on the right. The background image must be shown whole and scaled proportionally; app overlay hot zones should use percentage coordinates, not fixed pixels.
+
+Visible row/stance labels to map and verify:
+
+- Air area:
+  - Bomber.
+  - Fighter — Surface style stance label visible.
+- Naval area:
+  - Battleship — Offensive / Defensive, with anti-air capability indicated.
+  - Carrier — Offensive / Defensive, with anti-air capability indicated.
+  - Cruiser — Escort / Offensive.
+  - Submarine.
+- Board includes Dive / Escaped areas for submarines.
+- Board center shows Air-vs-Sea combat value columns and Force/Port Advantage reminders.
+- Outer columns show Damaged / Eliminated tracks.
+
+These image-derived labels are for mapping/tooling; verify exact wording against the physical board before finalizing data keys.
+
+---
+
+## 2. Core Terms and Units
+
+Command ID: the large number code on a black background identifies a Command by Nation. Naval Commands use 1-9, Air Commands use 11-19, and Land Commands use 20+.
+
+Command Stack: a stack of Units capped by a Command Token. Limit: 8 stacked Units per Command. A Command stack may not be disbanded just to free a Command Token.
+
+Unit categories and unit types:
+
+- Land Units: Infantry, Artillery, Armor.
+- Air Units: Fighters, Bombers.
+- Carrier Fighters: special Air Units that do not require Command Tokens or written orders; they launch in a special step after movement orders are executed.
+- Naval Units: Submarines, Cruisers, Aircraft Carriers, Battleships.
+- Multiplier Units: white tokens can represent 3 of whatever Unit Type is directly below the multiplier in the stack.
+
+Hotspot Markers: placed on regions that require resolution. The red/blue side indicates Embattled status. Hotspots are also used during raids and on the Battle Board as counters.
+
+Medals / Civilian Goods: Medals represent battle achievements and are used on the Morale Board. The reverse side denotes Civilian Goods; both can be used to cancel Stress.
+
+Bomb Tokens / Industry Tokens: Bomb side shows Infrastructure damage due to Strategic Bombing Raids. Industry side marks Units under construction.
+
+Arrow Tags: indicate that an Air Command must land during Phase 5: Refit & Deploy. Red = Axis; Blue = Allied. Also used to denote Force Advantage in battle.
+
+Territory Control: a Nation that owns the Territory Card controls the territory. Sea regions are never controlled.
+
+Alliance: Allied Forces or Axis.
+
+Friendly: Nations of the same Alliance are Friendly and can never attack each other or themselves. The term can apply to territories and Units belonging to a Friendly Nation.
+
+Enemy: territories and commands of the opposing Alliance are Enemy. Standard Neutrals are neither Friendly nor Enemy until invaded.
+
+Unit Category: Land, Air, or Naval.
+
+Unit Type: a specific color/type within its Category, e.g. Armor, Artillery, Infantry.
+
+Active Region: any region with a conflict needing resolution: opposing forces in a territory/region, Convoy Raid, invasion of empty territory, or Strategic Bombing Raid. A Hotspot Marker is placed during Movement and removed or flipped after Combat. There should be no unresolved Hotspots by the end of Phase 4.
+
+Embattled Region: after a battle, if opposing Land or Naval Commands still share a territory or sea region, it becomes Embattled. Flip the Hotspot to the red/blue side, flip the Territory Card if relevant, and resolve it again in the next Combat Operations phase. Air Commands can land in an Embattled territory if it is Friendly.
+
+---
+
+## 3. Round Structure — Minimal Reference
+
+Each round has 7 phases:
+
+1. Direct National Economy.
+2. Strategic Planning.
+3. Movement Operations.
+4. Combat Operations.
+5. Refit & Deploy.
+6. Morale.
+7. Production.
+
+For this assistant, detailed production/setup/trade/scenario rules are intentionally removed. The useful implementation focus is Phase 4 Combat, Phase 5 cleanup relevant to combat, and Phase 6 stress/medal handling.
+
+---
+
+## 4. Combat Operations — Battle Terms
+
+Battle Stages:
+
+- Air Battle Stage: first stage. Includes attacks against Air Units by Enemy Units, including anti-air Units on the surface and Air Units in the sky.
+- Surface Battle Stage: second stage. Targets Land or Naval Units. Includes attacks from surviving Air Units, including damaged Air Units, and/or Enemy Land/Naval Units.
+
+A battle may have 1 or 2 Stages depending on the types of Units present. A Nation may never attack an ally or itself.
+
+Combat Values:
+
+- A unit row may have an Air Combat Value and/or a Surface Combat Value.
+- Each value is used for its respective Stage; it is not either/or.
+- Units start in their labeled Initial Status slot.
+
+Battle status boxes:
+
+- Initial Status: normal starting status.
+- Lightly Damaged: Carriers, Battleships, and Armor have extra damage boxes. No repair is required if only lightly damaged.
+- Damaged: boxes with a red cross require repair. Most damaged Units are vulnerable to white die results if the box has a white triangle.
+- Eliminated: Units in this column are removed at the end of battle.
+- Dive: damaged Submarines in the Dive box are not susceptible to white hits. After each batch of Enemy dice is rolled and fully assigned, Submarines that are damaged but not eliminated flee the battle. Move escaped Submarines to the Escaped area.
+
+---
+
+## 5. Combat Operations — Order of Battles
+
+In Turn Order, each Nation selects an Active Hotspot and resolves it. The chosen conflict or raid must involve that Nation's forces or territory; otherwise the Nation passes if it has no such Hotspots.
+
+Repeat until all Hotspots are addressed exactly once.
+
+Rules:
+
+- A region should never have more than 1 Hotspot Marker.
+- Placement and resolution of a Hotspot is not optional.
+- Remove Hotspots from the World Map as they become resolved, unless they remain Embattled.
+- Rarely, a captured territory may create or remove a Convoy Raid Hotspot.
+
+---
+
+## 6. Battle Setup
+
+Step 1. Set Facing of Battle Board
+
+- Flip/use the Battle Board side relevant to the battle: Land or Sea.
+
+Step 2. Place Units on Battle Board
+
+- Allied Forces are on the right side; Axis are on the left.
+- Move each Unit from the chosen Active region on the World Map to its respective starting box according to Type and Nationality.
+- Troop Transports remain on the World Map and are handled during Battle Debrief.
+- Units under construction do not battle and may be captured if the territory is lost.
+
+Step 3. Place Command Tokens on Flags
+
+- Place Command Tokens on matching Flags printed on the Battle Board.
+- When multiple Friendly Nations are on either side, use National Flags or Unit orientation to track ownership and align them in columns.
+
+Step 4. Assign Commanders
+
+- Multiple Nations of the same Alliance choose a Commander from among those involved.
+- The Commander makes all battle decisions and rolls all dice for the current conflict.
+- Disputes over Commander are settled using Turn Order Rank.
+- In Battle Debrief, the Commander chooses which participating allied Nation claims a newly won territory and which Nation(s) receive Medal(s).
+
+Step 5. Assign Combat Stances
+
+- Most Unit Types have a choice of Stance with different strengths/weaknesses.
+- A Stance can affect dice in Air and/or Surface stages.
+- Move each Unit to an Initial Status box matching its Type and chosen Stance.
+- Units of the same Type do not all need the same Stance.
+- The Commander first in Turn Order finalizes stances first.
+- Stances remain in effect for both Battle Stages.
+
+Step 6. Note Advantages
+
+- Place Arrow Tags in relevant boxes to remind players of Force Advantage and Port Advantage.
+- Alliances share both conditions.
+
+Garrison Force:
+
+- Empty territories have a Garrison Force, including Neutral territories whose Defense Force has been eliminated but have not been captured.
+- If attacked by Land forces, the attacking force does not roll against the Garrison Force.
+- Instead, the Garrison Force rolls 2 dice.
+- If both dice roll the same color matching an invading Land Unit Type, eliminate 1 Unit of that Type.
+- Black results are wild; white results miss.
+- After this exchange, the territory is captured if any invading Land Units remain.
+
+---
+
+## 7. Advantages
+
+### Force Advantage
+
+During the Surface Battle Stage only, the side with more Land or Naval Unit Types on the Battle Board has Force Advantage.
+
+- If one side has Force Advantage, black and white dice results are considered misses for the other side.
+- Stances are irrelevant for determining Force Advantage.
+- If both sides have an equal number of relevant Unit Types, neither side has Force Advantage.
+- Evaluate Force Advantage only at the start of the Surface Battle Stage.
+- Do not re-evaluate if the balance changes after any batch is resolved.
+- Air Units attacking Land or Naval Units do not affect Force Advantage, but their dice results are affected by it.
+
+### Cruiser Escort Stance
+
+Each Cruiser assigned to the special Escort Stance gives its Commander the option for that Cruiser to take hits, including white or black hits, that would normally be assigned to a Carrier or Battleship.
+
+- After blue hits are resolved, choose substitutions in response to each hit assigned by the Enemy to a Carrier or Battleship, one at a time.
+- A damaged Cruiser may still use this ability until it is sunk.
+- Allies can protect each other’s Units with this ability.
+
+### Port Advantage
+
+If a battle occurs in a Port-connected sea region, the side with a Friendly Port-connected territory has Port Advantage.
+
+- Both sides can have Port Advantage.
+- Damaged Ports and Ports controlled by Nations in the Yellow Zone or worse on the Homeland Status Track do not provide Port Advantage.
+- A side with Port Advantage rolls 2 extra dice, respecting the 30-dice limit, for the Surface Battle Stage of sea battles if Friendly Naval Units are present.
+- Repairs for Naval Units are free instead of costing 1 Resource per damaged Unit.
+- Additional Ports on the same side have no extra effect.
+- Territory control, and therefore Port Advantage, updates immediately after each battle, so Hotspot resolution order can matter.
+
+---
+
+## 8. Battle Resolution — Standard Battle
+
+Resolve battle in this order:
+
+1. Conduct the Air Battle Stage if Air Units are present. Air Units eliminated in this Stage do not participate in later steps.
+2. Resolve Raids if applicable: Strategic Bombing Raid or Convoy Raid.
+3. Conduct the Surface Battle Stage if Land or Naval Units are present. Damaged Air Units participate if in a Ground/Surface Stance.
+4. Conduct Battle Debrief.
+
+### Battle Stage procedure
+
+For each Battle Stage, Air or Surface:
+
+A. Calculate dice to be rolled by each side.
+
+- Each Commander multiplies the number of their own Units in each Battle Board row by that row’s Combat Value for the current Stage.
+- Add all row totals to a grand total.
+- A side may never roll more than 30 dice per Battle Stage; ignore excess.
+- The 30-dice limit also applies to each Raid.
+- Use Hotspots along the Battle Board edge to track each side’s total dice for the current Stage.
+
+Air Battle Stage counting:
+
+- Count all Air Units and any Land/Naval Units with anti-air firepower.
+
+Surface Battle Stage counting:
+
+- Count all Land/Naval Units and any surviving Air Units except those conducting Strategic Bombing Raids.
+
+B. Roll dice in batches.
+
+- Results are effectively simultaneous because Combat Values are totaled before rolling begins.
+- Roll in batches of 10 dice until all dice for the current Stage are rolled.
+- Only the last batch per Battle Stage may have fewer than 10 dice.
+- The Commander first in Turn Order rolls and resolves their first batch, then the opposing Commander does the same.
+- Repeat for second and third batches if relevant.
+- When multiple allies are present, the Commander rolls all dice for that Alliance.
+- Assign damage for each batch before rolling the next batch.
+- Results cannot be saved or combined with a later/previous batch.
+
+C. Assign damage.
+
+- Air Battle Stage: only Air Units may be hit, even if Land/Naval Units participated with anti-air firepower.
+- Surface Battle Stage: only Land/Naval Units may be hit, even if Air Units participated.
+- If a die color matches an Enemy Unit color, it is a hit against that Unit Type.
+- The current dice roller assigns hits to Enemy Units by moving them 1 step closer to that row’s Eliminated box.
+- A damaged or lightly damaged Unit must be eliminated before another Unit in the same row can be assigned a hit.
+- When multiple allies are in the same battle, transfer eliminated Units immediately to the owning Nation’s row on the Casualty List so ownership is not confused.
+- Hits may never be assigned to Units that are not legal targets for the current Stage.
+- Resolve all results of one color before moving to the next color.
+
+Color assignment order:
+
+1. Yellow.
+2. Blue.
+3. Green.
+4. Red.
+5. Black.
+6. White.
+
+Black and white dice:
+
+- Each black result is a wild hit for the current Battle Stage and may be used as any other color, including intentionally missing.
+- Each white result may only hit an Enemy Unit in a box with a white triangle, in the current Battle Stage.
+- If the Enemy has Force Advantage, black and white results are always misses.
+
+---
+
+## 9. Raids
+
+### Strategic Bombing Raids
+
+Strategic Bombing Raids can occur in any territory with a potential Enemy target: Resources, Units under construction, and/or Infrastructure.
+
+- During Battle Setup, Bombers may be placed in Strategic Stance.
+- Strategic Bombing occurs between Air Battle Stage and Surface Battle Stage if the Bombers survive the Air Battle Stage.
+- The attacker rolls 4 dice per raiding Bomber and applies damage before rolling for the next Bomber.
+- Destroyed Units under construction go to the Casualty List.
+- Lost Resources are recorded by type on the target Nation’s Resource Chart, subject to Resource Loss Limits.
+
+Strategic Bombing die results:
+
+- Yellow: destroy 1 Infantry or Submarine under construction, or deplete 1 Enemy OSR.
+- Blue: destroy 1 Artillery or Cruiser under construction, or deplete 1 Enemy Iron.
+- Green: destroy 1 Armor, Carrier, or Fighter under construction.
+- Red: destroy 1 Bomber or Battleship under construction, or deplete 1 Enemy Oil.
+- White: damage all Infrastructure, including Ports and Rails, by adding a Bomb Token.
+- Black: choose any 1 above result, even if it causes no damage.
+
+Bomb Tokens:
+
+- Permanent unless using Bomb Damage Repair optional rule.
+- Only territories with Industries can have more than 1 Bomb Token.
+- A captured bombed territory remains damaged.
+- Immediate effects:
+  - No Port Advantage from damaged Ports.
+  - No Rail movement into, out of, or through the territory.
+  - If relevant, each Bomb Token permanently reduces that territory’s Production output by 1.
+
+### Convoy Raids
+
+Convoys are groups of color-coded transport ship silhouettes within a ring on the World Map. Convoys may be raided once each round and refresh next round. A change in control of a linked territory affects Convoy control immediately.
+
+Trans-Ocean Convoys:
+
+- Bear a National Flag and labels for origin/destination territories.
+- If both territories are controlled by Nations of the same Alliance, the Convoy is active and may be raided by the opposing Alliance.
+- If two Axis Nations control the territories, they decide which Nation places its National Flag to denote control and suffer liability.
+- If the territories are controlled by opposing Nations, the Convoy is inactive and may not be raided.
+- Raids on Trans-Ocean Convoys are unaffected by Resource Loss Limits except that Resources cannot drop below 0.
+
+Coastal Convoys:
+
+- Linked to certain Ports on the World Map.
+- The Nation controlling the linked territory suffers Resource losses from a Raid.
+- A Coastal Convoy is located only in the sea region containing its ship silhouettes.
+- Coastal Convoys are always active.
+
+Convoy Clusters:
+
+- Some sea regions have several rings connected into a single Convoy Cluster.
+- Convoy Clusters are raided as one combined Convoy.
+
+Identifying Convoy Raids:
+
+- If an air or naval force is in a sea region with an active Enemy Convoy or Convoy Cluster, and there are no defending Naval or Air Units at the very beginning of Phase 4, place a Hotspot to indicate a raid must be resolved.
+- If defenders are in the region, no raiding may occur, even after a battle is resolved.
+- Troop Transports do not act as defenders and may be sunk in addition to a Convoy Raid.
+
+Resolving Convoy Raids:
+
+- Each Convoy may be raided only once each round.
+- Each Command may raid only 1 Convoy or Convoy Cluster in its region.
+- Each Carrier Fighter counts as a Command for this purpose.
+- If multiple Friendly Commands target the same Convoy, they conduct 1 raid together and choose a Commander if needed.
+- Attacker rolls 1 die per Air or Naval Unit in the raiding Command(s), max 30 dice.
+- If at least 1 yellow result is rolled, all yellow Enemy ships in that Convoy are sunk; controlling Nation loses 1 OSR per yellow ship sunk.
+- Apply same procedure for blue/Iron and red/Oil ships.
+- Black results are wild and may be used for any color.
+- For Coastal Convoys, observe Loss Limits.
+
+Resource Loss Limits:
+
+- A territory cannot lose more total Resources of each type than it currently produces from a single raid, using flipped Territory Card status if relevant.
+- A territory’s Resources can be lost twice in a single round if hit by both Strategic Bombing and Convoy Raid, because each raid is resolved independently.
+- Resource losses deplete current totals, not future income.
+- A Nation’s Resources cannot drop below 0.
+
+---
+
+## 10. Battle Debrief
+
+After Air and Surface Battle Stages, resolve steps A-G.
+
+### Step A. Assess Unit Status and Pay for Repairs
+
+At battle end, Units are in one of these states:
+
+- Initial Status: normal.
+- Damaged: must be repaired or eliminated.
+- Eliminated: removed to Casualty List.
+
+Lightly Damaged Battleships, Carriers, and Armor require no repair; move them back to Initial Status.
+
+Repairs:
+
+- Naval Units repair for free if Port Advantage applies.
+- Each damaged Unit may be repaired by paying 1 Resource of any type.
+- Move repaired Units back to Initial Status.
+- A Nation’s Resources may not drop below 0 and may not trade outside Production.
+- If repair is declined or impossible, move the damaged Unit, including Carrier Fighters, to Eliminated.
+- Air Units eliminated due to lack of repair still participate in Surface Battle Stage or Strategic Bombing because repair happens after all Battle Stages.
+
+### Step B. Remove Eliminated Units
+
+- Move Units in Eliminated boxes to the Casualty List on the Morale Board by Nation and Type.
+- For multiple allies, move eliminated Units to the owning Nation’s row immediately during battle.
+- Eliminated Carrier Fighters are moved to the Casualty List.
+- If a Carrier is eliminated and its Carrier Fighter is not, the Carrier Fighter is not moved to the Casualty List.
+
+### Step C. Check for Lost Troop Transports
+
+- Unguarded Troop Transports, meaning Land Commands at sea without a Friendly Naval or Air Unit in the same sea region, are all eliminated if any Enemy Air or Naval Units are present.
+- If the only Friendly Units are Submarines and any Enemy Air Units are present, the Troop Transports are eliminated.
+- Enemy Troop Transports do not matter.
+- Transfer Units in eliminated Troop Transports to the Casualty List.
+
+### Step D. Return Command Stacks to World Map
+
+- Return surviving Command Stacks to the appropriate World Map region.
+- Reorganize within that region if desired.
+- Do not mix Units owned by Friendly Nations.
+- Do not return surviving Carrier Fighters to parent Carriers; they are removed in Phase 5, and each surviving Carrier generates a new Carrier Fighter.
+
+### Step E. Update Territory Status — Land Battles
+
+Determine control:
+
+- A Nation gains control of an Enemy-controlled territory if its Alliance is the only force with at least 1 surviving Land Unit.
+- If both sides still have Land Units, or neither side has Land Units, control does not change.
+- Air Units alone cannot capture or hold territory.
+- If multiple Nations are victorious, the Commander decides which participating Nation with at least 1 surviving Land Unit becomes controller.
+
+Territory Card / Embattled status:
+
+- If control changes, former controller surrenders the Territory Card to new controller.
+- If control does not change and Enemy Land Units remain, flip/keep the Territory Card on its Embattled side.
+
+National Flag:
+
+- If control changes, update the National Flag on the territory.
+- If new controller is the original map-color controller, remove all Flags; otherwise place the new controller’s Flag.
+
+Captured Units:
+
+- Units under an Industry Token are captured and deploy under new ownership during Refit & Deploy.
+- China may capture Land Units, including Armor, but never captures Air or Naval Units; those are removed to storage.
+
+Evacuate Enemy Air Commands:
+
+- If the Alliance that does not control the territory has only Air Commands remaining, those Commands must move to a Friendly territory during Phase 5 Land Air Commands or be eliminated.
+
+### Step F. Assign Stress and Medals
+
+- Add newly gained Medals to the Morale Board.
+- Reposition National Flags on Stress Track as appropriate.
+
+Award Medals for Active Hotspot:
+
+- If a territory is captured or recaptured, the victorious Commander chooses which participating Friendly Nation(s) receive Medal(s).
+- Medals may be awarded to a participating Nation even if all of its Units were eliminated.
+- A Nation receiving Medal(s) does not need to be the Nation taking control.
+- Medals are never awarded for capturing Neutrals.
+- Capture non-capital territory: 1 Medal, regardless of SV.
+- Capture capital territory: 3 Medals, regardless of SV or victory requirement.
+- Medals may be awarded unevenly among Friendly participating Nations.
+
+Apply Stress for Active Hotspot:
+
+- Loss of territory: former controller gains Stress equal to the lost territory’s SV, regardless of original map controller.
+- Breaking the Soviet-Japanese Non-Aggression Pact: first Nation to break it gains 6 Stress.
+- Invasion of Neutral territory: win or lose, invading Nation gains 1 Stress per invasion, first time only.
+
+### Step G. Update Hotspot Marker
+
+- If Land or Naval Units from both sides remain in the region, flip Hotspot to Embattled side.
+- Otherwise remove the Hotspot.
+
+---
+
+## 11. Refit & Deploy — Combat-Relevant Cleanup Only
+
+### Land Air Commands
+
+All Air Commands that moved and/or participated in combat should have Arrow Tags. Each may now move up to 2 regions and must land in a Friendly territory. It may land in a Friendly Embattled territory or a territory captured by Friendly forces this round.
+
+Rules:
+
+- Resolve in Turn Order if any player insists.
+- Remove Arrow Tags as Air Commands land.
+- Air Command landing movement is not written on O&P Charts.
+- Air Commands may split while landing.
+- If an Air Command has no legal landing move, it is eliminated and moved to the Casualty List.
+- Air Commands alone may never take control of Enemy territory after battle, even if no Enemy forces are present.
+- Remove all Carrier Fighters from the World Map to storage.
+
+### Reorganize Commands
+
+- Nations may merge or split their own Commands that share a region.
+- Reorganizing can happen simultaneously or in Turn Order if anyone insists.
+- No Command Stack can exceed 8 Units.
+- There is no limit to total Commands in a region.
+- Merged Units must all be in the same Unit Category: Land, Air, or Naval.
+- When splitting a Command, assign a new Command Token.
+- Store unused Command Tokens.
+
+Production deployment details are intentionally omitted.
+
+---
+
+## 12. Morale — Stress and Medals
+
+### Convert Casualties into Stress
+
+In Turn Order, each Nation totals Unit Casualty Points and converts them into Stress Points.
+
+Steps:
+
+1. For each Unit Type, multiply lost Units by the corresponding factor shown on the Morale Board.
+2. Add all Unit Type results to get total Casualty Points.
+3. Convert Casualty Points into Stress Points according to the Conversion Chart, adding to existing Stress Points.
+4. Move the National Flag along the Stress Track to reflect the new total.
+5. Return lost Units to storage.
+
+OCR note: the original text references a Conversion Chart on the Morale Board; use the physical board/image reference when implementing exact values.
+
+### Resolve Medals and Stress Points
+
+Stress can come from Casualty Points, territory losses, Neutral invasions, or broken Soviet-Japanese Pact. Complete each step for all Nations before proceeding to the next step. Nations may not backtrack in reaction to other Nations’ choices.
+
+Step 1. Submit Medals to Cancel Stress Points
+
+- A Nation may give up any combination of Medals and/or Civilian Goods to cancel Stress Points at 1 Medal or 1 Civilian Good per 1 Stress Point.
+- Stress Points, Medals, and Civilian Goods may never be traded among Nations.
+- Unspent Medals/Civilian Goods may be kept indefinitely.
+
+Step 2. Evaluate Stress Levels
+
+- Each Nation’s square Flag printed on the Stress Track indicates its Stress Threshold.
+- If Stress Points are equal to or greater than the threshold, move that Nation’s Flag up to the next Zone on the Homeland Status Track.
+- Reduce that Nation’s Stress Point total by its Stress Threshold, keeping any remainder.
+- A Nation may move up more than 1 Zone per round; repeat until remaining Stress is below threshold.
+- If a Nation has no Units or controls no Territories, it advances 1 Zone.
+- If a Nation is in Gray Zone, it cannot advance further and therefore does not reduce Stress Points.
+
+Step 3. Relieve Stress
+
+- At this point only, each Nation may spend Medals and/or Civilian Goods equal to its Stress Threshold to slide back 1 Zone.
+- A Nation cannot slide back more than 1 Zone per round and cannot go beyond White Zone.
+
+Step 4. Apply Stress Zone Penalties
+
+Penalties are cumulative and recur each round if a Nation is at that level or worse.
+
+- White Zone — Acceptable Stress: no penalty.
+- Blue Zone — Labor and Civil Unrest: Nation must pay any 3 Resources if able.
+- Yellow Zone — Dysfunctional Rails and Ports: Rails controlled by the Nation are unusable by it or allies. No trade by sea. Ports controlled by the Nation do not provide Port Advantage, but deployment may still occur there.
+- Orange Zone — Disrupted Supply Lines: Nation has 3 fewer orders during Strategic Planning.
+- Red Zone — Economic Collapse: no new Resources may be added. Current Resources may still be spent or lost.
+- Gray Zone — Mass Desertion: Nation transfers to Casualty List a number of Units from the World Map equal to current Stress Points. Excludes Units under construction and Carrier Fighters. Stress Points are not reduced by desertion.
+
+---
+
+## 13. Quick Battle Reference
+
+Quick Battle Rules are optional and designed to speed play. Unless stated otherwise, standard rules are unchanged.
+
+Quick Battle does not transfer Command stacks away from the World Map. Each Commander uses a dry-erase Quick Battle Chart.
+
+### Step A. Record Units
+
+- Each Commander records the number of Units per Type participating in the battle in the center area of all rows.
+- If directing multiple Nations, write values in columns aligned with each Flag.
+- Exclude Troop Transports.
+- Assign Stances only for Bombers in land battles where there is a potential Strategic Bombing Raid target.
+- Update Air Unit totals after Air Battle Stage; eliminated Air Units do not battle in Surface Battle Stage.
+
+### Step B. Calculate Dice to Be Rolled by Each Side
+
+- For each participating Unit Type, multiply Unit count by Combat Value for the current Stage.
+- Each Commander totals the column for the current Stage and notes dice to roll.
+- Use Port Advantage if relevant.
+
+Force Advantage reminder for Surface Battle Stage only:
+
+- If one side has a majority of Land or Naval Unit Types, that side has Force Advantage.
+- The side with fewer Land/Naval Unit Types treats black and white results as misses.
+
+Advanced optional Force Advantage Batch Cap reminder:
+
+- A side with 1 fewer Land/Naval Unit Type may roll up to 2 batches only.
+- A side with 2+ fewer Land/Naval Unit Types may roll 1 batch only.
+
+### Step C. Roll Dice in Batches
+
+- Check off each batch as it is rolled and resolved.
+- If only 1 die would be rolled in the last batch, add a second die.
+
+### Step D. Assign Hits
+
+- For each batch, match pairs of results by color, in any order, to eliminate a Unit of that color.
+- Black and white are wild and may pair with any color or another wild result.
+- Only one white result may be applied to each Unit.
+- Two white results alone do not eliminate a normal Unit.
+- Unpaired results are misses and do not carry over to the next batch.
+- Battleships and Carriers require triplets, 3 hits, to eliminate.
+- Again, only one white result may be applied to each Unit.
+- Draw an X for each eliminated Unit below the corresponding Unit Type and Nation Flag.
+
+Quick Battle exceptions:
+
+- Cruiser Escort Stance does not apply in Quick Battle.
+- Submarines: white results cannot be used against submarines at all.
+- A Submarine escapes if an odd yellow result remains unpaired in a batch. Track escaped Submarines in the Dive/Escaped boxes.
+
+### Step E. Battle Debrief
+
+- No repair of Units in Quick Battle, because Units never exist in a damaged state.
+- Remove eliminated Units from the World Map rather than from the Battle Board.
+- Reorganize Command Stacks if desired.
+
+---
+
+## 14. Battle Board Combat Values and Die Faces
+
+Source notes: The die face distribution is from the original rules OCR, Game Components: each d12 has 1 white, 1 black, 1 red, 2 green, 3 blue, and 4 yellow faces. Combat values were transcribed from the local `assets/land.jpg` and `assets/sea.png` Battle Board images.
+
+### D12 Die Face Distribution
+
+| Result | Faces | Probability |
+|---|---:|---:|
+| White | 1 | 1/12 = 8.33% |
+| Black | 1 | 1/12 = 8.33% |
+| Red | 1 | 1/12 = 8.33% |
+| Green | 2 | 2/12 = 16.67% |
+| Blue | 3 | 3/12 = 25.00% |
+| Yellow | 4 | 4/12 = 33.33% |
+
+### Land Battle Board Combat Values
+
+| Unit | Stance | Air Battle Dice per Unit | Land Battle Dice per Unit | Strategic Bombing Dice per Unit |
+|---|---|---:|---:|---:|
+| Bomber | Strategic | 1 | 0 | 4 |
+| Bomber | Air/Ground | 1 | 4 | 0 |
+| Fighter | Air | 3 | 0 | 0 |
+| Fighter | Ground | 0 | 3 | 0 |
+| Armor | Defensive | 1 | 2 | 0 |
+| Armor | Offensive | 0 | 4 | 0 |
+| Artillery | Anti-Air | 2 | 1 | 0 |
+| Artillery | Ground | 0 | 2 | 0 |
+| Infantry | Defensive | 0 | 1 | 0 |
+| Infantry | Offensive | 0 | 2 | 0 |
+
+### Sea Battle Board Combat Values
+
+| Unit | Stance | Air Battle Dice per Unit | Sea Battle Dice per Unit | Strategic Bombing Dice per Unit |
+|---|---|---:|---:|---:|
+| Bomber | — | 1 | 3 | 0 |
+| Fighter | Air | 3 | 0 | 0 |
+| Fighter | Surface | 0 | 3 | 0 |
+| Battleship | Anti-Air | 2 | 3 | 0 |
+| Battleship | Offensive | 1 | 4 | 0 |
+| Carrier | Anti-Air | 2 | 1 | 0 |
+| Carrier | Offensive | 1 | 2 | 0 |
+| Cruiser | Escort | 2 | 2 | 0 |
+| Cruiser | Offensive | 1 | 3 | 0 |
+| Submarine | — | 0 | 2 | 0 |
+
+---
+
+## 15. Implementation Notes for This App
+
+Useful data models to derive from these rules:
+
+- Battle Board hot zones: Nation/side × Unit Type × Stance/status box.
+- Standard battle state: Initial, Lightly Damaged, Damaged, Eliminated, Escaped/Dive.
+- Dice model: stage, side, row combat value, 30-dice cap, batch of 10, color order, black/white special rules, Force/Port Advantage.
+- Battle debrief checklist: repair, casualties, lost transports, return stacks, territory status, medals/stress, hotspot update.
+- Quick battle model: counts by Unit Type, dice totals, pairs/triplets, no damage/repair state.
+- Morale model: casualties → stress, medals/civilian goods cancellation, threshold zone movement, recurring penalties.
+
+Do not treat this file as a complete War Room rulebook. It is a compact assistant reference for implementation and in-game aid.

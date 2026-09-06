@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>War Room 快速战斗结算台</title>
+  <link rel="stylesheet" href="./css/style.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <h1>WAR ROOM</h1>
+      <p class="subtitle">快速战斗结算台</p>
+    </div>
+
+    <div class="global-controls">
+      <button class="btn" data-action="new-battle" type="button">开始新战斗</button>
+      <button class="btn" data-action="reroll" type="button">重新掷骰</button>
+      <div class="segmented" id="battlefield-switch" role="group" aria-label="战场切换">
+        <button class="btn seg is-active" data-field="land" type="button">陆战</button>
+        <button class="btn seg" data-field="sea" type="button">海战</button>
+      </div>
+      <div class="segmented" id="view-switch" role="group" aria-label="视图切换">
+        <button class="btn seg is-active" data-view="battle" type="button">战斗</button>
+        <button class="btn seg" data-view="pressure" type="button">压力</button>
+      </div>
+      <button class="btn" data-action="toggle-log" type="button">日志</button>
+      <button class="btn" data-action="toggle-settings" type="button">设置</button>
+    </div>
+
+    <div class="stage-phaser">
+      <div class="stage-indicator">
+        <span id="stage-label">空战阶段</span>
+        <span id="battlefield-label" class="muted">陆战</span>
+      </div>
+      <nav class="phase-bar" id="phase-bar" aria-label="流程阶段">
+        <button data-phase="deploy" type="button">部署</button>
+        <button data-phase="roll" type="button">掷骰</button>
+        <button data-phase="assign" type="button">自动分配</button>
+        <button data-phase="manual" type="button">手动调整</button>
+        <button data-phase="settle" type="button">结算</button>
+      </nav>
+      <button class="btn btn-primary" id="primary-action" type="button">进入空战阶段</button>
+      <button class="btn" id="revert-settle" type="button" data-action="revert-settle" hidden>回退结算修改</button>
+      <button class="btn" id="submit-casualties" type="button" data-action="submit-casualties" hidden>提交战损</button>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <div class="battlefield" id="battle-view">
+    <section class="side side-axis" data-side="axis">
+      <header class="side-head">
+        <h2>轴心</h2>
+        <div class="flag-row" id="axis-flags"></div>
+      </header>
+      <div class="advantage-bar">
+        <label class="check"><input type="checkbox" id="axis-force"> 兵种优势</label>
+        <label class="check"><input type="checkbox" id="axis-port"> 港口优势</label>
+        <span class="escaped" id="axis-escaped">潜艇逃离 0</span>
+      </div>
+      <div class="dice-area" id="axis-dice"></div>
+      <div class="grid-area" id="axis-grid"></div>
+    </section>
+
+    <section class="side side-allied" data-side="allied">
+      <header class="side-head">
+        <h2>同盟</h2>
+        <div class="flag-row" id="allied-flags"></div>
+      </header>
+      <div class="advantage-bar">
+        <label class="check"><input type="checkbox" id="allied-force"> 兵种优势</label>
+        <label class="check"><input type="checkbox" id="allied-port"> 港口优势</label>
+        <span class="escaped" id="allied-escaped">潜艇逃离 0</span>
+      </div>
+      <div class="dice-area" id="allied-dice"></div>
+      <div class="grid-area" id="allied-grid"></div>
+    </section>
+    </div>
+
+    <section class="pressure-view" id="pressure-view" hidden></section>
+  </main>
+
+  <footer class="app-footer">
+    <details id="log-panel">
+      <summary>日志</summary>
+      <ol id="log-list"></ol>
+    </details>
+  </footer>
+
+  <dialog id="settings-panel">
+    <form method="dialog">
+      <h3>设置</h3>
+      <label>掷骰顺序
+        <select id="set-roll-order">
+          <option value="simultaneous">左右同时</option>
+          <option value="axis-first">轴心先</option>
+          <option value="allied-first">同盟先</option>
+        </select>
+      </label>
+      <label>国家分配策略
+        <select id="set-nation-priority">
+          <option value="min-stack">优先最小堆叠（默认）</option>
+          <option value="max-stack">优先最大堆叠</option>
+        </select>
+      </label>
+      <label>优先打击国家
+        <select id="set-target-nation">
+          <option value="">无（自动）</option>
+        </select>
+      </label>
+      <button class="btn" value="cancel" type="button" data-action="close-settings">关闭</button>
+    </form>
+  </dialog>
+
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>

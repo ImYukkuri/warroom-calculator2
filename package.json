@@ -1,0 +1,11 @@
+{
+  "name": "war-room-assistant",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "War Room 线下结算助手（掷骰 / 伤害分配 / 全局压力记录）",
+  "scripts": {
+    "start": "python -m http.server 8080",
+    "selfcheck": "node scripts/selfcheck.mjs"
+  }
+}
