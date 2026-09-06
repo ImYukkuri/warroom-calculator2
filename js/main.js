@@ -804,26 +804,29 @@ function renderGrid(side) {
     { title: state.battlefield === 'land' ? '陆军' : '海军', units: surfaceUnits },
   ];
   const gutter = gutterTiles(side);
-  // 国家 × 单位：国家做列（横轴），单位做行（纵轴）；骰数总览放左右槽位
-  let html = '<div class="unit-wrap">';
-  html += '<div class="dice-gutter left">' + gutter + '</div>';
-  html += '<div class="grid-scroll"><table class="grid"><thead><tr><th class="corner"></th>';
+  // 国家 × 单位：国家做列（横轴），单位做行（纵轴）；骰数总览只保留靠页面中心一侧
+  let grid = '<div class="grid-scroll"><table class="grid"><thead><tr><th class="corner"></th>';
   for (const n of nations) {
-    html += '<th class="nation-head"><img class="th-flag-fill" src="./assets/' + n.flag + '" alt=""><span class="nation-name">' + n.name + '</span></th>';
+    grid += '<th class="nation-head"><img class="th-flag-fill" src="./assets/' + n.flag + '" alt=""><span class="nation-name">' + n.name + '</span></th>';
   }
-  html += '</tr></thead><tbody>';
+  grid += '</tr></thead><tbody>';
   for (const sec of sections) {
     for (const uid of sec.units) {
-      html += '<tr><td class="unit">' + UNIT_META[uid].name + '</td>';
+      grid += '<tr><td class="unit">' + UNIT_META[uid].name + '</td>';
       for (const n of nations) {
-        html += renderCell(side, n.id, uid);
+        grid += renderCell(side, n.id, uid);
       }
-      html += '</tr>';
+      grid += '</tr>';
     }
   }
-  html += '</tbody></table></div>';
-  html += '<div class="dice-gutter right">' + gutter + '</div>';
-  html += '</div>';
+  grid += '</tbody></table></div>';
+
+  let html;
+  if (side === 'axis') {
+    html = '<div class="unit-wrap">' + grid + '<div class="dice-gutter right">' + gutter + '</div></div>';
+  } else {
+    html = '<div class="unit-wrap"><div class="dice-gutter left">' + gutter + '</div>' + grid + '</div>';
+  }
   box.innerHTML = html;
 }
 
