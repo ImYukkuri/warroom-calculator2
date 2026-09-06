@@ -234,6 +234,8 @@ export function autoAssign(state, side, diceIds) {
         for (const d of picked) {
           d.status = 'assigned';
           d.groupId = group.id;
+          d.fresh = true;
+          d.assignOrder = groups.length;
         }
         groups.push(group);
         state.sides[enemySide].destroyed[t.nation][t.unit] += 1;
@@ -289,7 +291,7 @@ export function cancelGroup(state, side, groupId) {
   const enemySide = other(side);
   for (const dieId of group.diceIds) {
     const die = s.dice.find(function (d) { return d.id === dieId; });
-    if (die) { die.status = 'pending'; die.groupId = null; }
+    if (die) { die.status = 'pending'; die.groupId = null; delete die.fresh; delete die.assignOrder; }
   }
   state.sides[enemySide].destroyed[group.targetNation][group.targetUnit] -= 1;
   s.groups.splice(idx, 1);

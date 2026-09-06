@@ -69,12 +69,12 @@ body {
 }
 
 .stage-phaser {
-  flex: 1 1 100%;
+  margin-left: auto;
+  flex: 0 0 auto;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 14px;
-  padding-top: 2px;
 }
 
 .btn {
@@ -181,6 +181,12 @@ body {
 }
 .dice-area .hint { width: 100%; color: var(--muted); font-size: 14px; }
 
+.dice-row { display: flex; gap: 12px; align-items: flex-start; width: 100%; }
+.dice-batches { flex: 1 1 auto; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.dice-overview { flex: 0 0 auto; display: flex; flex-direction: column; gap: 4px; }
+.overview-row { display: flex; gap: 8px; }
+.batch-empty { color: var(--muted); font-size: 20px; min-width: 40px; }
+
 .dice-counter { display: flex; flex-wrap: wrap; gap: 10px; width: 100%; }
 .counter-item {
   display: inline-flex; align-items: center; gap: 9px;
@@ -211,6 +217,7 @@ body {
 .batch-label { color: var(--muted); font-size: 14px; margin-right: 6px; }
 
 .die {
+  position: relative;
   width: 54px; height: 54px;
   border-radius: 7px;
   display: inline-grid; place-items: center;
@@ -220,32 +227,58 @@ body {
   animation: die-in 220ms ease-out;
 }
 .die img { width: 100%; height: 100%; object-fit: contain; }
-.die.is-assigned { opacity: 0.55; }
-.die.is-miss { opacity: 0.2; filter: grayscale(0.8); }
-.die.is-pending { outline: 3px solid var(--accent); outline-offset: 2px; }
+.die.is-assigned { opacity: 0.35; filter: grayscale(0.35); }
+.die.is-just-assigned { animation: assign-dim 0.5s ease forwards; }
+.die.is-miss { opacity: 0.95; filter: none; outline: 2px dashed var(--muted); outline-offset: 1px; }
+.die.is-pending { opacity: 1; filter: none; outline: 3px solid var(--accent); outline-offset: 2px; }
 .die.is-selected { outline: 3px solid #fff; outline-offset: 2px; }
+
+@keyframes assign-dim {
+  0% { opacity: 1; filter: none; outline: 3px solid #fff; outline-offset: 2px; }
+  100% { opacity: 0.35; filter: grayscale(0.35); outline-color: transparent; }
+}
 
 @keyframes die-in {
   from { transform: translateY(-8px) rotate(-8deg); opacity: 0; }
   to { transform: translateY(0) rotate(0); opacity: 1; }
 }
 
-/* 伤害分配网格 */
-.grid-area { flex: 1 1 auto; overflow-x: auto; }
-.grid { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+/* 伤害分配网格：骰数槽位在左右 */
+.grid-area { flex: 1 1 auto; min-width: 0; }
+.unit-wrap { display: flex; align-items: stretch; height: 100%; min-height: 320px; }
+.dice-gutter {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 100px; /* 对齐国家表头之下 */
+}
+.dice-gutter.left { padding-right: 12px; }
+.dice-gutter.right { padding-left: 12px; }
+.gutter-tile {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-width: 96px; min-height: 74px;
+  background: var(--panel-2); border: 1px solid var(--line-strong);
+  border-radius: var(--radius); padding: 8px 12px;
+}
+.gutter-tile span { color: var(--muted); font-size: 15px; }
+.gutter-tile b { font-size: 34px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.gutter-tile.strat { border-color: var(--accent); }
+.grid-scroll { flex: 1 1 auto; overflow-x: auto; min-width: 0; }
+.grid { border-collapse: collapse; width: 100%; table-layout: fixed; font-variant-numeric: tabular-nums; }
 .grid th, .grid td { border: 1px solid var(--line); text-align: center; }
 .grid th { font-size: 17px; color: var(--muted); font-weight: 600; padding: 12px 12px; background: var(--panel-2); }
-.grid th.nation-head { position: relative; width: 140px; height: 100px; overflow: hidden; padding: 0; }
+.grid th.nation-head { position: relative; height: 112px; overflow: hidden; padding: 0; }
 .th-flag-fill { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
 .nation-name {
   position: relative; z-index: 1; font-size: 20px; font-weight: 800; color: #fff;
   text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 0 6px rgba(0,0,0,0.6);
 }
-.grid .corner { min-width: 120px; }
-.grid td.unit { font-size: 17px; color: var(--ink); padding: 8px 12px; text-align: right; white-space: nowrap; }
+.grid .corner { width: 120px; }
+.grid td.unit { font-size: 18px; color: var(--ink); padding: 8px 12px; text-align: right; white-space: nowrap; }
 
 .cell {
-  min-width: 150px; min-height: 122px;
+  min-width: 172px; min-height: 140px;
   background: var(--panel-2);
   cursor: pointer;
   position: relative;
@@ -255,10 +288,10 @@ body {
 .cell:hover { background: #26303c; }
 .cell.is-current { outline: 4px solid var(--accent); outline-offset: -4px; }
 .cell.is-legal { background: #283d2e; }
-.cell-row { display: flex; align-items: baseline; justify-content: center; gap: 12px; }
-.cell .alive { font-size: 52px; font-weight: 800; line-height: 1; }
+.cell-row { display: flex; align-items: baseline; justify-content: center; gap: 14px; }
+.cell .alive { font-size: 60px; font-weight: 800; line-height: 1; }
 .cell .alive.is-zero { color: transparent; }
-.cell .destroyed { font-size: 28px; color: var(--danger); font-weight: 800; min-width: 30px; }
+.cell .destroyed { font-size: 32px; color: var(--danger); font-weight: 800; min-width: 34px; }
 
 /* 战斗结算组件 */
 .settle-view { max-width: 1600px; margin: 0 auto; padding: 20px 22px 32px; }

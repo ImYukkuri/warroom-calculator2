@@ -212,8 +212,8 @@ function onPrimaryAction() {
 
 function startAirStage() {
   snapshotStageStart();
-  prepareStage(state);
   state.stage = 'air';
+  prepareStage(state);
   state.phase = 'roll';
   log('空战阶段开始');
   rollCurrentBatches();
@@ -243,8 +243,8 @@ function finishAirManual() {
 
 function startSurfaceStage() {
   snapshotStageStart();
-  prepareStage(state);
   state.stage = 'surface';
+  prepareStage(state);
   state.phase = 'roll';
   log(state.battlefield === 'land' ? '陆面阶段开始' : '海面阶段开始');
   rollCurrentBatches();
@@ -690,27 +690,57 @@ function renderDice(side) {
   const s = state.sides[side];
   const html = [];
 
-  // 骰子计数器总揽：色块 + 数字（0 灰，>0 白并随数量轻微偏红）
+  // 颜色计数按 3 行 × 2 列：红绿 / 蓝黄 / 黑白
   const counts = { yellow: 0, blue: 0, green: 0, red: 0, black: 0, white: 0 };
   for (const d of s.dice) counts[d.color] = (counts[d.color] || 0) + 1;
-  html.push('<div class="dice-counter">');
-  for (const c of COLOR_ORDER) {
-    const n = counts[c] || 0;
-    const numCls = n === 0 ? 'counter-num zero' : 'counter-num';
-    const numStyle = n > 0 ? ' style="color:' + counterColor(n) + '"' : '';
-    html.push('<div class="counter-item"><span class="counter-swatch" data-color="' + c + '"></span><span class="' + numCls + '"' + numStyle + '>' + n + '</span></div>');
-  }
-  html.push('</div>');
+  const overviewRows = [['red', 'green'], ['blue', 'yellow'], ['black', 'white']];
 
-  // 骰数总览：空战 / 陆海战 / 战略轰炸 分开显示
-  const airCount = diceCountFor(state, side, 'air');
-  const surfaceCount = diceCountFor(state, side, 'surface');
-  const stratCount = state.battlefield === 'land' ? strategicBombersFor(side) * 4 : 0;
-  html.push('<div class="dice-counts">');
-  html.push('<div class="dice-count"><span>空战</span><b>' + airCount + '</b></div>');
-  html.push('<div class="dice-count"><span>' + (state.battlefield === 'land' ? '陆面' : '海面') + '</span><b>' + surfaceCount + '</b></div>');
-  if (state.battlefield === 'land') html.push('<div class="dice-count"><span>战略轰炸</span><b>' + stratCount + '</b></div>');
-  html.push('</div>');
+  let overview = '<div class="dice-overview">';
+  for (const row of overviewRows) {
+    overview += '<div class="overview-row">';
+    for (const c of row) {
+      const n = counts[c] || 0;
+      const numCls = n === 0 ? 'counter-num zero' : 'counter-num';
+      const numStyle = n > 0 ? ' style="color:' + counterColor(n) + '"' : '';
+      overview += '<div class="counter-item"><span class="counter-swatch" data-color="' + c + '"></span><span class="' + numCls + '"' + numStyle + '>' + n + '</span></div>';
+    }
+    overview += '</div>';
+  }
+  overview += '</div>';
+
+  // 三批次始终占位显示
+  let batches = '<div class="dice-batches">';
+  const byBatch = [[], [], []];
+  for (const d of s.dice) {
+    if (d.batch < 3) byBatch[d.batch].push(d);
+  }
+  for (let b = 0; b < 3; b += 1) {
+    batches += '<div class="dice-batch"><span class="batch-label">批' + (b + 1) + '</span>';
+    if (byBatch[b].length) {
+      for (const d of byBatch[b]) {
+        const cls = ['die'];
+        let delayStyle = '';
+        if (d.status === 'assigned') {
+          cls.push('is-assigned');
+          if (d.fresh) {
+            cls.push('is-just-assigned');
+            delayStyle = ' style="animation-delay:' + ((d.assignOrder || 0) * 0.04).toFixed(2) + 's"';
+          }
+        } else if (d.status === 'miss') cls.push('is-miss');
+        else if (d.status === 'pending') cls.push('is-pending');
+        if (selectedDieId === d.id) cls.push('is-selected');
+        batches += '<span class="' + cls.join(' ') + '" data-color="' + d.color + '" data-die="' + d.id + '" title="' + COLOR_LABELS[d.color] + '"' + delayStyle + '><img src="./assets/dice_' + d.color + '.png" alt="' + COLOR_LABELS[d.color] + '"></span>';
+      }
+    } else {
+      batches += '<span class="batch-empty">·</span>';
+    }
+    batches += '</div>';
+  }
+  batches += '</div>';
+
+  // 总览靠页面中部：轴心放右、同盟放左
+  if (side === 'axis') html.push('<div class="dice-row">' + batches + overview + '</div>');
+  else html.push('<div class="dice-row">' + overview + batches + '</div>');
 
   if (state.phase === 'roll' && s.batchPlan.length) {
     html.push('<span class="hint">本阶段应掷 ' + s.batchPlan.join('+') + ' 骰 · 已完成 ' + s.batchesRolled + '/' + s.batchPlan.length + ' 批</span>');
@@ -722,27 +752,18 @@ function renderDice(side) {
     }
     html.push('</div>');
   }
-  // 按批次分行显示，批次之间加分割线
-  const batches = [];
-  for (const d of s.dice) {
-    (batches[d.batch] = batches[d.batch] || []).push(d);
-  }
-  for (let b = 0; b < batches.length; b += 1) {
-    html.push('<div class="dice-batch"><span class="batch-label">批' + (b + 1) + '</span>');
-    for (const d of batches[b]) {
-      const cls = ['die'];
-      if (d.status === 'assigned') cls.push('is-assigned');
-      else if (d.status === 'miss') cls.push('is-miss');
-      else if (d.status === 'pending') cls.push('is-pending');
-      if (selectedDieId === d.id) cls.push('is-selected');
-      html.push('<span class="' + cls.join(' ') + '" data-color="' + d.color + '" data-die="' + d.id + '" title="' + COLOR_LABELS[d.color] + '"><img src="./assets/dice_' + d.color + '.png" alt="' + COLOR_LABELS[d.color] + '"></span>');
-    }
-    html.push('</div>');
-  }
   if (state.phase === 'manual' && s.dice.some((d) => d.status === 'pending')) {
     html.push('<button class="btn" data-reassign="' + side + '" type="button">重新自动分配待分配骰子</button>');
   }
   box.innerHTML = html.join('');
+
+  // 新分配骰子动画结束后清除 fresh 标记，避免后续渲染重复动画
+  const freshDice = s.dice.filter((d) => d.fresh);
+  if (freshDice.length) {
+    const maxOrder = Math.max(...freshDice.map((d) => d.assignOrder || 0));
+    const totalMs = maxOrder * 40 + 520;
+    setTimeout(() => { for (const d of freshDice) delete d.fresh; }, totalMs);
+  }
 
   box.querySelectorAll('.die.is-pending').forEach((el) => {
     el.addEventListener('click', () => {
@@ -762,6 +783,17 @@ function renderDice(side) {
   });
 }
 
+function gutterTiles(side) {
+  const airCount = diceCountFor(state, side, 'air');
+  const surfaceCount = diceCountFor(state, side, 'surface');
+  const stratCount = state.battlefield === 'land' ? strategicBombersFor(side) * 4 : 0;
+  let h = '';
+  if (state.battlefield === 'land') h += '<div class="gutter-tile strat"><span>战略轰炸</span><b>' + stratCount + '</b></div>';
+  h += '<div class="gutter-tile air"><span>空战</span><b>' + airCount + '</b></div>';
+  h += '<div class="gutter-tile surf"><span>' + (state.battlefield === 'land' ? '陆面' : '海面') + '</span><b>' + surfaceCount + '</b></div>';
+  return h;
+}
+
 function renderGrid(side) {
   const box = side === 'axis' ? $('#axis-grid') : $('#allied-grid');
   const nations = nationsFor(state.battlefield).filter((n) => ALLIANCE_OF[n.id] === side);
@@ -771,8 +803,11 @@ function renderGrid(side) {
     { title: '空军', units: airUnits },
     { title: state.battlefield === 'land' ? '陆军' : '海军', units: surfaceUnits },
   ];
-  // 国家 × 单位：国家做列（横轴），单位做行（纵轴）
-  let html = '<table class="grid"><thead><tr><th class="corner"></th>';
+  const gutter = gutterTiles(side);
+  // 国家 × 单位：国家做列（横轴），单位做行（纵轴）；骰数总览放左右槽位
+  let html = '<div class="unit-wrap">';
+  html += '<div class="dice-gutter left">' + gutter + '</div>';
+  html += '<div class="grid-scroll"><table class="grid"><thead><tr><th class="corner"></th>';
   for (const n of nations) {
     html += '<th class="nation-head"><img class="th-flag-fill" src="./assets/' + n.flag + '" alt=""><span class="nation-name">' + n.name + '</span></th>';
   }
@@ -786,7 +821,9 @@ function renderGrid(side) {
       html += '</tr>';
     }
   }
-  html += '</tbody></table>';
+  html += '</tbody></table></div>';
+  html += '<div class="dice-gutter right">' + gutter + '</div>';
+  html += '</div>';
   box.innerHTML = html;
 }
 

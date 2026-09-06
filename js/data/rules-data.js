@@ -84,13 +84,13 @@ export const COMBAT_VALUES = Object.freeze({
 
 // 每个战场下：空军区常显；陆/海面区随战场切换
 export const FIELD_UNITS = Object.freeze({
-  land: Object.freeze({ air: ['fighter', 'bomber', 'bomber_strategic'], surface: ['infantry', 'artillery', 'armor'] }),
+  land: Object.freeze({ air: ['fighter', 'bomber', 'bomber_strategic'], surface: ['armor', 'artillery', 'infantry'] }),
   sea: Object.freeze({ air: ['fighter', 'bomber'], surface: ['submarine', 'cruiser', 'carrier', 'battleship'] }),
 });
 
 // 每个阶段可被命中的兵种（与 FIELD_UNITS 一致，语义上表示“合法目标”）
 export const STAGE_TARGETS = Object.freeze({
-  land: Object.freeze({ air: ['fighter', 'bomber', 'bomber_strategic'], surface: ['infantry', 'artillery', 'armor'] }),
+  land: Object.freeze({ air: ['fighter', 'bomber', 'bomber_strategic'], surface: ['armor', 'artillery', 'infantry'] }),
   sea: Object.freeze({ air: ['fighter', 'bomber'], surface: ['submarine', 'cruiser', 'carrier', 'battleship'] }),
 });
 
