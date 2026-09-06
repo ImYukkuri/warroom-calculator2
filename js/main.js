@@ -453,8 +453,10 @@ function renderPrimaryAction() {
 }
 
 function renderView() {
-  $('#battle-view').hidden = viewMode !== 'battle';
-  $('#pressure-view').hidden = viewMode !== 'pressure';
+  const battleEl = $('#battle-view');
+  const pressureEl = $('#pressure-view');
+  if (battleEl) battleEl.hidden = viewMode !== 'battle';
+  if (pressureEl) pressureEl.hidden = viewMode !== 'pressure';
   document.querySelectorAll('#view-switch [data-view]').forEach((b) => b.classList.toggle('is-active', b.dataset.view === viewMode));
   if (viewMode === 'pressure') renderPressure();
   else render();
@@ -486,6 +488,7 @@ function submitCasualties() {
 function renderPressure() {
   const box = $('#pressure-view');
   if (!box) return;
+  if (!pressure || !pressure.nations || !pressure.roundCasualties) pressure = createPressureState();
   let html = '<div class="pressure-banner">压力系统 DEMO · 占位换算（1 伤亡点 = 1 压力，阈值 = 5）待替换为实体士气板数据</div>';
   html += '<div class="pressure-columns">';
   html += renderPressureColumn('轴心', NATIONS.filter((n) => n.alliance === 'axis'));
