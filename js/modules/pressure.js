@@ -115,8 +115,10 @@ export function newRound(p) {
     nat.previousRoundStress = totalStress(p, n.id);
     nat.contestedTerritory = 0;
     nat.medals = 0;
-    for (const uid of Object.keys(p.roundCasualties[n.id])) p.roundCasualties[n.id][uid] = 0;
+    const rc = p.roundCasualties[n.id] || {};
+    for (const uid of Object.keys(rc)) rc[uid] = 0;
   }
   p.adjustmentLog = [];
-  p.round += 1;
+  p.log = [];
+  p.round = (p.round || 1) + 1;
 }

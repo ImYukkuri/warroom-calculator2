@@ -71,13 +71,22 @@ check('主力舰需三连', () => {
   if (s.sides.allied.destroyed.uk.battleship !== 1) throw new Error('战列舰应被三连击毁');
 });
 
-check('潜艇逃离：每批结算后若有存活潜艇逃 1 艘', () => {
+check('潜艇逃离：奇数黄未配对逃 1 艘', () => {
   const s = createBattle('sea');
   s.stage = 'surface';
   s.sides.allied.deployed.uk.submarine = 2;
   s.sides.axis.dice.push({ id: 'd1', color: 'yellow', batch: 0, status: 'pending', groupId: null });
   autoAssign(s, 'axis', ['d1']);
-  if (s.sides.allied.escapedSubs !== 1) throw new Error('应逃离 1 艘潜艇');
+  if ((s.sides.allied.escaped.uk || 0) !== 1) throw new Error('应逃离 1 艘潜艇');
+});
+
+check('潜艇逃离：无黄不逃', () => {
+  const s = createBattle('sea');
+  s.stage = 'surface';
+  s.sides.allied.deployed.uk.submarine = 2;
+  s.sides.axis.dice.push({ id: 'd1', color: 'red', batch: 0, status: 'pending', groupId: null });
+  autoAssign(s, 'axis', ['d1']);
+  if ((s.sides.allied.escaped.uk || 0) !== 0) throw new Error('无黄不应逃离');
 });
 
 check('取消命中回退骰子与击毁计数', () => {

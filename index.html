@@ -15,6 +15,7 @@
 
     <div class="global-controls">
       <button class="btn" data-action="new-battle" type="button">开始新战斗</button>
+      <button class="btn" data-action="new-game" type="button">开始新游戏</button>
       <button class="btn" data-action="reroll" type="button">重新掷骰</button>
       <div class="segmented" id="battlefield-switch" role="group" aria-label="战场切换">
         <button class="btn seg is-active" data-field="land" type="button">陆战</button>
@@ -89,6 +90,17 @@
     </details>
   </footer>
 
+  <dialog id="confirm-dialog">
+    <form method="dialog">
+      <h3>确认</h3>
+      <p id="confirm-message"></p>
+      <div class="dialog-actions">
+        <button class="btn" value="cancel" type="button" data-action="confirm-cancel">取消</button>
+        <button class="btn btn-primary" value="confirm" id="confirm-ok" type="button">确认</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="settings-panel">
     <form method="dialog">
       <h3>设置</h3>
@@ -113,6 +125,8 @@
       <button class="btn" value="cancel" type="button" data-action="close-settings">关闭</button>
     </form>
   </dialog>
+
+  <div id="tooltip" class="tooltip" hidden></div>
 
   <script type="module" src="./js/main.js"></script>
 </body>

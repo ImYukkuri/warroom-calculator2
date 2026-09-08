@@ -23,11 +23,13 @@ export function createBattle(battlefield) {
     const deployed = {};
     const destroyed = {};
     const adjustments = {};
+    const escaped = {};
     for (const nation of nationsFor(battlefield)) {
       if (ALLIANCE_OF[nation.id] !== side) continue;
       deployed[nation.id] = {};
       destroyed[nation.id] = {};
       adjustments[nation.id] = {};
+      escaped[nation.id] = 0;
       for (const uid of ids) {
         deployed[nation.id][uid] = 0;
         destroyed[nation.id][uid] = 0;
@@ -38,12 +40,12 @@ export function createBattle(battlefield) {
       deployed,
       destroyed,
       adjustments,
+      escaped,
       dice: [],
       groups: [],
       batchPlan: [],
       batchesRolled: 0,
       advantages: { force: null, forceManual: false, port: false },
-      escapedSubs: 0,
     };
   }
   return {
@@ -140,7 +142,8 @@ function buildTargets(state, enemySide) {
     for (const uid of targetUnits) {
       const deployed = s.deployed[nation.id][uid] || 0;
       const destroyed = s.destroyed[nation.id][uid] || 0;
-      const remaining = deployed - destroyed;
+      let remaining = deployed - destroyed;
+      if (uid === 'submarine') remaining -= (s.escaped[nation.id] || 0);
       if (remaining > 0) {
         targets.push({
           nation: nation.id,
@@ -159,7 +162,9 @@ function totalSurviving(state, side, nationId) {
   const s = state.sides[side];
   let total = 0;
   for (const uid of unitIdsFor(state.battlefield)) {
-    total += Math.max(0, (s.deployed[nationId][uid] || 0) - (s.destroyed[nationId][uid] || 0));
+    let n = (s.deployed[nationId][uid] || 0) - (s.destroyed[nationId][uid] || 0);
+    if (uid === 'submarine') n -= (s.escaped[nationId] || 0);
+    total += Math.max(0, n);
   }
   return total;
 }
@@ -249,15 +254,20 @@ export function autoAssign(state, side, diceIds) {
     for (const d of byColor[color]) d.status = 'miss';
   }
 
-  // 潜艇逃离：仅海战海面阶段，每批结算后若敌方仍有存活潜艇则逃 1 艘
+  // 潜艇逃离：仅海战海面阶段；每批结算后，黄色骰子未配对剩奇数个时逃 1 艘（从存活剔除）
   if (field === 'sea' && state.stage === 'surface') {
-    let subs = 0;
-    const es = state.sides[enemySide];
-    for (const nation of nationsFor(field)) {
-      if (ALLIANCE_OF[nation.id] !== enemySide) continue;
-      subs += Math.max(0, (es.deployed[nation.id].submarine || 0) - (es.destroyed[nation.id].submarine || 0));
+    const yellowMiss = diceIds.filter(function (id) {
+      const d = sideState.dice.find(function (x) { return x.id === id; });
+      return d && d.color === 'yellow' && d.status === 'miss';
+    }).length;
+    if (yellowMiss % 2 === 1) {
+      const es = state.sides[enemySide];
+      const order = nationsFor(field).filter(function (n) { return ALLIANCE_OF[n.id] === enemySide; });
+      for (const n of order) {
+        const rem = (es.deployed[n.id].submarine || 0) - (es.destroyed[n.id].submarine || 0) - (es.escaped[n.id] || 0);
+        if (rem > 0) { es.escaped[n.id] = (es.escaped[n.id] || 0) + 1; break; }
+      }
     }
-    if (subs > 0) es.escapedSubs += 1;
   }
 
   for (const g of groups) sideState.groups.push(g);

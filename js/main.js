@@ -1,6 +1,6 @@
 import {
   ALLIANCE_OF, COLOR_LABELS, COLOR_ORDER, FIELD_UNITS, NATIONS, SIDES, STRATEGIC_BOMBING_RESULTS,
-  UNIT_META, nationsFor, unitIdsFor,
+  UNIT_IMAGE, UNIT_META, nationsFor, unitIdsFor,
 } from './data/rules-data.js';
 import {
   CASUALTY_FACTORS, NATION_STRESS_THRESHOLDS,
@@ -39,14 +39,9 @@ function loadPressure() {
     const raw = localStorage.getItem('warroom.pressure.v1');
     if (!raw) return null;
     const old = JSON.parse(raw);
-    // 旧 demo schema 迁移：nations 里是 stress/medals/civilianGoods
+    // 旧 demo schema：直接丢弃，避免把 demo 的 stress 误当成上回合压力
     if (old.nations && old.nations.germany && 'stress' in old.nations.germany) {
-      const p = createPressureState();
-      if (old.roundCasualties) p.roundCasualties = old.roundCasualties;
-      for (const n of NATIONS) {
-        if (old.nations[n.id]) p.nations[n.id].previousRoundStress = old.nations[n.id].stress || 0;
-      }
-      return p;
+      return createPressureState();
     }
     return old;
   } catch (e) { return null; }
@@ -65,6 +60,13 @@ function init() {
   document.querySelectorAll('#view-switch [data-view]').forEach((btn) => {
     btn.addEventListener('click', () => { viewMode = btn.dataset.view; renderView(); });
   });
+  document.addEventListener('click', (e) => {
+    const tip = $('#tooltip');
+    if (!tip || tip.hidden) return;
+    if (tip.contains(e.target)) return;
+    if (tooltipAnchor && tooltipAnchor.contains(e.target)) return;
+    hideTooltip();
+  });
   renderView();
 }
 
@@ -74,9 +76,11 @@ function bindHeader() {
     btn.addEventListener('click', () => {
       const action = btn.dataset.action;
       if (action === 'new-battle') newBattle(state.battlefield);
+      else if (action === 'new-game') newGame();
       else if (action === 'reroll') reroll();
       else if (action === 'revert-settle') revertSettle();
       else if (action === 'submit-casualties') submitCasualties();
+      else if (action === 'confirm-cancel') $('#confirm-dialog').close();
       else if (action === 'toggle-log') toggleLog();
       else if (action === 'toggle-settings') openSettings();
       else if (action === 'close-settings') $('#settings-panel').close();
@@ -171,6 +175,21 @@ function newBattle(battlefield) {
   save(); render();
 }
 
+function newGame() {
+  showConfirm('开始新游戏？将清空本场战斗、压力系统、本回合累计与全部日志。', () => {
+    state = createBattle(state.battlefield);
+    pressure = createPressureState();
+    currentCell = null;
+    selectedDieId = null;
+    try { localStorage.removeItem('warroom.quickbattle.v1'); } catch (e) {}
+    try { localStorage.removeItem('warroom.pressure.v1'); } catch (e) {}
+    save();
+    savePressure();
+    viewMode = 'battle';
+    renderView();
+  });
+}
+
 function reroll() {
   if (state.phase === 'deploy') return;
   restoreStageStartDestroyed();
@@ -254,7 +273,7 @@ function settle() {
   state.settleSnapshot = {
     destroyed: clone({ axis: state.sides.axis.destroyed, allied: state.sides.allied.destroyed }),
     adjustments: clone({ axis: state.sides.axis.adjustments, allied: state.sides.allied.adjustments }),
-    escapedSubs: { axis: state.sides.axis.escapedSubs, allied: state.sides.allied.escapedSubs },
+    escaped: clone({ axis: state.sides.axis.escaped, allied: state.sides.allied.escaped }),
   };
   state.phase = 'settle';
   log('结算完成');
@@ -266,7 +285,7 @@ function revertSettle() {
   for (const side of SIDES) {
     state.sides[side].destroyed = clone(state.settleSnapshot.destroyed[side]);
     state.sides[side].adjustments = clone(state.settleSnapshot.adjustments[side]);
-    state.sides[side].escapedSubs = state.settleSnapshot.escapedSubs[side];
+    state.sides[side].escaped = clone(state.settleSnapshot.escaped[side]);
   }
   log('已回退结算修改');
   save(); render();
@@ -432,7 +451,7 @@ function render() {
   const fieldEl = document.querySelector('#battle-view .battlefield');
   const settleEl = $('#settle-view');
   const isSettle = state.phase === 'settle';
-  if (fieldEl) fieldEl.hidden = isSettle;
+  if (fieldEl) fieldEl.style.display = isSettle ? 'none' : '';
   if (settleEl) {
     settleEl.hidden = !isSettle;
     if (isSettle) renderSettle();
@@ -513,7 +532,8 @@ function submitCasualties() {
   savePressure();
   save();
   log('已提交战损：本场 Y+Z 并入本回合累计');
-  render();
+  viewMode = 'pressure';
+  renderView();
 }
 
 function renderSettle() {
@@ -539,20 +559,24 @@ function renderSettle() {
       const total = Math.max(0, X + Y + Z);
       const factor = CASUALTY_FACTORS[uid] || 0;
       totalPts += total * factor;
-      thisBattlePts += Y * factor;
+      thisBattlePts += Math.max(0, Y + Z) * factor;
       cells.push({ uid, total, z: Z, x: X, y: Y });
     }
     html += '<tr><td class="nation-cell">' + n.name + '</td>';
     html += '<td class="readonly">' + totalPts + '</td>';
     html += '<td class="readonly">' + thisBattlePts + '</td>';
     for (const c of cells) {
-      const zText = c.z !== 0 ? ' <span class="z">' + (c.z > 0 ? '+' : '') + c.z + '</span>' : '';
-      html += '<td class="settle-unit" data-nation="' + n.id + '" data-unit="' + c.uid + '" title="X' + c.x + ' + Y' + c.y + ' + Z' + c.z + '">' + c.total + zText + '</td>';
+      const parts = [];
+      if (c.x !== 0) parts.push('<span class="p-x">' + c.x + '</span>');
+      if (c.y !== 0) parts.push('<span class="p-y">' + c.y + '</span>');
+      if (c.z !== 0) parts.push('<span class="p-z">' + c.z + '</span>');
+      const label = parts.length ? parts.join('+') : '';
+      html += '<td class="settle-unit" data-nation="' + n.id + '" data-unit="' + c.uid + '" title="基础X=' + c.x + ' · 本场Y=' + c.y + ' · 调整Z=' + c.z + '">' + label + '</td>';
     }
     html += '</tr>';
   }
   html += '</tbody></table>';
-  html += '<div class="settle-actions"><button class="btn btn-primary" id="settle-submit" type="button">提交战损</button><button class="btn" id="settle-revert" type="button">回退结算修改</button></div>';
+  html += '<div class="settle-actions"><button class="btn btn-primary" id="settle-submit" type="button">提交战损</button><button class="btn" id="settle-new-battle" type="button">开始新战斗</button></div>';
   box.innerHTML = html;
   bindSettleEvents(box);
 }
@@ -564,8 +588,8 @@ function bindSettleEvents(box) {
   });
   const submit = box.querySelector('#settle-submit');
   if (submit) submit.addEventListener('click', submitCasualties);
-  const revert = box.querySelector('#settle-revert');
-  if (revert) revert.addEventListener('click', revertSettle);
+  const newBattleBtn = box.querySelector('#settle-new-battle');
+  if (newBattleBtn) newBattleBtn.addEventListener('click', () => newBattle(state.battlefield));
 }
 
 function adjustSettleUnit(nation, unit, delta) {
@@ -581,8 +605,9 @@ function adjustSettleUnit(nation, unit, delta) {
 function renderPressure() {
   const box = $('#pressure-view');
   if (!box) return;
+  hideTooltip();
   if (!pressure || !pressure.nations || !pressure.roundCasualties) pressure = createPressureState();
-  let html = '<div class="pressure-head"><h3>压力系统</h3><button class="btn" id="new-round" type="button">新回合</button></div>';
+  let html = '<div class="pressure-head"><h3>压力系统</h3><div class="pressure-actions"><button class="btn" id="new-round" type="button">新回合</button><button class="btn" id="pressure-new-battle" type="button">开始新战斗</button></div></div>';
   html += '<table class="pmatrix"><thead><tr><th></th>';
   for (const n of NATIONS) html += '<th><img src="./assets/' + n.flag + '" alt="">' + n.name + '</th>';
   html += '</tr></thead><tbody>';
@@ -590,7 +615,7 @@ function renderPressure() {
     ['国家名称', (n) => n.name],
     ['压力阈值', (n) => NATION_STRESS_THRESHOLDS[n.id]],
     ['总压力值', (n) => totalStress(pressure, n.id)],
-    ['上一轮压力', (n) => pressure.nations[n.id].previousRoundStress],
+    ['上回合压力', (n) => pressure.nations[n.id].previousRoundStress],
     ['本回合新增压力', (n) => thisRoundAdded(pressure, n.id)],
     ['击杀分压力', (n) => casualtyStress(pressure, n.id)],
     ['伤亡点数', (n) => casualtyPoints(pressure, n.id)],
@@ -625,14 +650,14 @@ function bindPressureEvents(box) {
   box.querySelectorAll('.zone-cell').forEach((cell) => {
     cell.addEventListener('click', () => {
       const z = Number(cell.dataset.zone);
-      alert('第 ' + (z + 1) + ' 压力阶段 · ' + ZONES[z] + '：' + ZONE_EFFECTS[z]);
+      showTooltip(cell, '<div class="tt-title">第 ' + (z + 1) + ' 压力阶段 · ' + ZONES[z] + '</div><div class="tt-body">' + ZONE_EFFECTS[z] + '</div>');
     });
   });
   box.querySelectorAll('.overview-cell').forEach((cell) => {
     cell.addEventListener('click', () => {
       const items = roundCasualtyOverview(pressure, cell.dataset.nation);
       const lines = items.map((it) => UNIT_META[it.unit].name + '：' + CASUALTY_FACTORS[it.unit] + '×' + it.count + '=' + it.points);
-      alert(lines.length ? lines.join('；') : '本回合暂无损失');
+      showTooltip(cell, '<div class="tt-title">本回合损失单位</div><div class="tt-body">' + (lines.length ? lines.join('<br>') : '本回合暂无损失') + '</div>');
     });
   });
   box.querySelectorAll('.editable-cell').forEach((cell) => {
@@ -649,7 +674,20 @@ function bindPressureEvents(box) {
     });
   });
   const nr = box.querySelector('#new-round');
-  if (nr) nr.addEventListener('click', () => { newRound(pressure); savePressure(); log('进入新回合'); renderPressure(); });
+  if (nr) nr.addEventListener('click', () => {
+    showConfirm('开始新回合？将清空本回合新增压力、争夺领地分、勋章分、伤亡与压力日志，只保留上一轮压力。', () => {
+      newRound(pressure);
+      savePressure();
+      log('进入新回合');
+      renderPressure();
+    });
+  });
+  const pnb = box.querySelector('#pressure-new-battle');
+  if (pnb) pnb.addEventListener('click', () => {
+    newBattle(state.battlefield);
+    viewMode = 'battle';
+    renderView();
+  });
 }
 
 function renderSide(side) {
@@ -812,7 +850,8 @@ function renderGrid(side) {
   grid += '</tr></thead><tbody>';
   for (const sec of sections) {
     for (const uid of sec.units) {
-      grid += '<tr><td class="unit">' + UNIT_META[uid].name + '</td>';
+      const color = UNIT_META[uid].color;
+      grid += '<tr class="unit-row" style="--rowc: var(--c-' + color + ')"><td class="unit">' + UNIT_META[uid].name + '</td>';
       for (const n of nations) {
         grid += renderCell(side, n.id, uid);
       }
@@ -834,7 +873,9 @@ function renderCell(side, nation, unit) {
   const s = state.sides[side];
   const deployed = s.deployed[nation] ? (s.deployed[nation][unit] || 0) : 0;
   const destroyed = s.destroyed[nation] ? (s.destroyed[nation][unit] || 0) : 0;
-  const alive = deployed - destroyed;
+  let alive = deployed - destroyed;
+  if (unit === 'submarine') alive -= (s.escaped && s.escaped[nation]) || 0;
+  alive = Math.max(0, alive);
   const isCurrent = currentCell && currentCell.side === side && currentCell.nation === nation && currentCell.unit === unit;
   const legal = isLegalTarget(side, nation, unit);
   const cls = ['cell'];
@@ -842,8 +883,11 @@ function renderCell(side, nation, unit) {
   if (legal) cls.push('is-legal');
   const aliveCls = alive === 0 ? 'alive is-zero' : 'alive';
   const destroyedHtml = destroyed > 0 ? '<span class="destroyed">✕' + destroyed + '</span>' : '';
+  const img = UNIT_IMAGE[unit];
+  const imgHtml = img ? '<img class="unit-img" src="./assets/' + img + '" alt="' + UNIT_META[unit].name + '">' : '';
   return '<td class="' + cls.join(' ') + '" data-nation="' + nation + '" data-unit="' + unit + '">' +
     '<div class="cell-row"><span class="' + aliveCls + '">' + alive + '</span>' + destroyedHtml + '</div>' +
+    imgHtml +
     '</td>';
 }
 
@@ -866,7 +910,9 @@ function isLegalTarget(gridSide, nation, unit) {
 
 function renderEscaped(side) {
   const el = side === 'axis' ? $('#axis-escaped') : $('#allied-escaped');
-  el.textContent = '潜艇逃离 ' + state.sides[side].escapedSubs;
+  const s = state.sides[side];
+  const total = Object.values(s.escaped || {}).reduce((a, b) => a + (b || 0), 0);
+  el.textContent = '潜艇逃离 ' + total;
 }
 
 function renderSettingsPanel() {
@@ -917,5 +963,39 @@ function nationName(id) {
 function log(msg) { state.log.push(new Date().toLocaleTimeString() + ' ' + msg); }
 function toggleLog() { const p = $('#log-panel'); p.open = !p.open; }
 function openSettings() { $('#settings-panel').showModal(); }
+
+function showConfirm(message, onConfirm) {
+  $('#confirm-message').textContent = message;
+  const dialog = $('#confirm-dialog');
+  const ok = $('#confirm-ok');
+  ok.onclick = () => { dialog.close(); onConfirm(); };
+  dialog.showModal();
+}
+
+let tooltipAnchor = null;
+function hideTooltip() {
+  const tip = $('#tooltip');
+  if (tip) tip.hidden = true;
+  tooltipAnchor = null;
+}
+function showTooltip(anchor, html) {
+  const tip = $('#tooltip');
+  if (!tip) return;
+  if (tooltipAnchor === anchor && !tip.hidden) { hideTooltip(); return; }
+  tip.innerHTML = html;
+  tip.hidden = false;
+  tip.style.left = '0px';
+  tip.style.top = '0px';
+  const tw = tip.offsetWidth;
+  const th = tip.offsetHeight;
+  const rect = anchor.getBoundingClientRect();
+  let left = rect.right + 10;
+  let top = rect.top;
+  if (left + tw > window.innerWidth - 8) left = Math.max(8, rect.left - tw - 10);
+  if (top + th > window.innerHeight - 8) top = window.innerHeight - th - 8;
+  tip.style.left = left + 'px';
+  tip.style.top = top + 'px';
+  tooltipAnchor = anchor;
+}
 
 init();

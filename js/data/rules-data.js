@@ -62,6 +62,20 @@ export const UNIT_META = Object.freeze({
   battleship: { name: '战列舰', category: 'sea', color: 'red', hitsRequired: 3 },
 });
 
+// 单位图片（assets 目录；战略轰炸机复用轰炸机图）
+export const UNIT_IMAGE = Object.freeze({
+  fighter: 'fighter.png',
+  bomber: 'bomber.png',
+  bomber_strategic: 'bomber.png',
+  armor: 'armor.png',
+  artillery: 'artillery.png',
+  infantry: 'infantry.png',
+  submarine: 'submarine.png',
+  cruiser: 'cruiser.png',
+  carrier: 'carrier.png',
+  battleship: 'battleship.png',
+});
+
 // 快速战斗值：{ air: 空战值, surface: 陆面/海面值, strategic: 战略轰炸骰/架 }
 export const COMBAT_VALUES = Object.freeze({
   land: Object.freeze({
@@ -84,14 +98,14 @@ export const COMBAT_VALUES = Object.freeze({
 
 // 每个战场下：空军区常显；陆/海面区随战场切换
 export const FIELD_UNITS = Object.freeze({
-  land: Object.freeze({ air: ['fighter', 'bomber', 'bomber_strategic'], surface: ['armor', 'artillery', 'infantry'] }),
-  sea: Object.freeze({ air: ['fighter', 'bomber'], surface: ['submarine', 'cruiser', 'carrier', 'battleship'] }),
+  land: Object.freeze({ air: ['bomber_strategic', 'bomber', 'fighter'], surface: ['armor', 'artillery', 'infantry'] }),
+  sea: Object.freeze({ air: ['bomber', 'fighter'], surface: ['battleship', 'carrier', 'cruiser', 'submarine'] }),
 });
 
 // 每个阶段可被命中的兵种（与 FIELD_UNITS 一致，语义上表示“合法目标”）
 export const STAGE_TARGETS = Object.freeze({
-  land: Object.freeze({ air: ['fighter', 'bomber', 'bomber_strategic'], surface: ['armor', 'artillery', 'infantry'] }),
-  sea: Object.freeze({ air: ['fighter', 'bomber'], surface: ['submarine', 'cruiser', 'carrier', 'battleship'] }),
+  land: Object.freeze({ air: ['bomber_strategic', 'bomber', 'fighter'], surface: ['armor', 'artillery', 'infantry'] }),
+  sea: Object.freeze({ air: ['bomber', 'fighter'], surface: ['battleship', 'carrier', 'cruiser', 'submarine'] }),
 });
 
 // 兵种优势：只比较陆/海军单位种类（空军不算）

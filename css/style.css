@@ -10,6 +10,8 @@
   --line-strong: #3a4452;
   --accent: #d8a93c;
   --accent-ink: #16120a;
+  --orange: #e8912d;
+  --orange-light: #f2bd7a;
   --axis: #b4573e;
   --allied: #4f7aa6;
   --danger: #c84b3b;
@@ -265,9 +267,12 @@ body {
 .gutter-tile b { font-size: 34px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .gutter-tile.strat { border-color: var(--accent); }
 .grid-scroll { flex: 1 1 auto; overflow-x: auto; min-width: 0; }
-.grid { border-collapse: collapse; width: 100%; table-layout: fixed; font-variant-numeric: tabular-nums; }
-.grid th, .grid td { border: 1px solid var(--line); text-align: center; }
-.grid th { font-size: 17px; color: var(--muted); font-weight: 600; padding: 12px 12px; background: var(--panel-2); }
+.grid { border-collapse: separate; border-spacing: 0; width: 100%; table-layout: fixed; font-variant-numeric: tabular-nums; }
+.grid th, .grid td { text-align: center; }
+.grid th { font-size: 17px; color: var(--muted); font-weight: 600; padding: 12px 12px; background: var(--panel-2); border-bottom: 1px solid var(--line); }
+.grid tr.unit-row td { border-top: 3px solid var(--rowc); border-bottom: 3px solid var(--rowc); border-left: 2px solid var(--line); }
+.grid tr.unit-row td:first-child { border-left: 3px solid var(--rowc); }
+.grid tr.unit-row td:last-child { border-right: 3px solid var(--rowc); }
 .grid th.nation-head { position: relative; height: 112px; overflow: hidden; padding: 0; }
 .th-flag-fill { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
 .nation-name {
@@ -288,10 +293,20 @@ body {
 .cell:hover { background: #26303c; }
 .cell.is-current { outline: 4px solid var(--accent); outline-offset: -4px; }
 .cell.is-legal { background: #283d2e; }
-.cell-row { display: flex; align-items: baseline; justify-content: center; gap: 14px; }
+.cell-row { display: flex; align-items: baseline; justify-content: center; gap: 14px; position: relative; z-index: 2; }
 .cell .alive { font-size: 60px; font-weight: 800; line-height: 1; }
 .cell .alive.is-zero { color: transparent; }
 .cell .destroyed { font-size: 32px; color: var(--danger); font-weight: 800; min-width: 34px; }
+.unit-img {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 84px;
+  height: auto;
+  opacity: 0.95;
+  pointer-events: none;
+  z-index: 1;
+}
 
 /* 战斗结算组件 */
 .settle-view { max-width: 1600px; margin: 0 auto; padding: 20px 22px 32px; }
@@ -303,12 +318,17 @@ body {
 .settle-table .readonly { color: var(--accent); font-weight: 800; font-size: 23px; }
 .settle-unit { cursor: pointer; min-width: 90px; }
 .settle-unit:hover { background: #26303c; }
-.settle-unit .z { color: var(--accent); font-size: 14px; margin-left: 6px; }
+.settle-unit .p-x, .settle-unit .p-y, .settle-unit .p-z { font-size: inherit; }
+.settle-unit .p-x { color: #ffffff; }
+.settle-unit .p-y { color: var(--orange); }
+.settle-unit .p-z { color: var(--orange-light); }
 .settle-actions { margin-top: 18px; display: flex; gap: 12px; }
 
 /* 压力矩阵页 */
 .pressure-view { max-width: 2200px; margin: 0 auto; padding: 18px 22px 32px; }
 .pressure-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.pressure-actions { display: flex; gap: 10px; }
+.dialog-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 4px; }
 .pressure-head h3 { font-family: Georgia, serif; font-size: 28px; margin: 0; }
 .pmatrix { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
 .pmatrix th, .pmatrix td { border: 1px solid var(--line); padding: 13px 12px; text-align: center; font-size: 19px; }
@@ -332,6 +352,21 @@ body {
 .app-footer ol { max-height: 220px; overflow-y: auto; font-size: 15px; list-style: none; padding-left: 0; }
 .app-footer li { padding: 3px 0; }
 .log-cat { color: var(--accent); font-weight: 700; margin-right: 4px; }
+
+.tooltip {
+  position: fixed;
+  z-index: 50;
+  max-width: 340px;
+  background: var(--panel-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.45);
+  font-size: 15px;
+  line-height: 1.5;
+}
+.tooltip .tt-title { font-weight: 800; color: var(--accent); margin-bottom: 6px; }
+.tooltip .tt-body { color: var(--ink); }
 
 dialog { background: var(--panel); color: var(--ink); border: 1px solid var(--line-strong); border-radius: var(--radius); padding: 22px; }
 dialog form { display: flex; flex-direction: column; gap: 14px; min-width: 360px; }
