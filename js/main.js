@@ -8,8 +8,8 @@ import {
   createPressureState, newRound, roundCasualtyOverview, thisRoundAdded, totalStress, zoneFor,
 } from './modules/pressure.js';
 import {
-  autoAssign, cancelGroup, createBattle, diceCountFor, forceAdvantage, isDisadvantaged,
-  prepareStage, rollNextBatch,
+  assignGroupToCell, autoAssign, cancelGroup, createBattle, diceCountFor, forceAdvantage, isDisadvantaged,
+  prepareStage, revertGroupForCell, rollNextBatch,
 } from './modules/engine.js';
 import { rollDice } from './modules/dice.js';
 
@@ -141,6 +141,12 @@ function bindGridDelegation() {
       const { nation, unit } = cell.dataset;
       if (state.phase === 'deploy') { adjustUnit(side, nation, unit, -1); save(); render(); }
       else if (state.phase === 'settle') adjustDestroyed(side, nation, unit, -1);
+      else if (state.phase === 'manual') {
+        const attacker = side === 'axis' ? 'allied' : 'axis';
+        const b = Math.max(0, state.sides[attacker].batchesRolled - 1);
+        revertGroupForCell(state, attacker, nation, unit, b);
+        save(); render();
+      }
     });
     area.addEventListener('wheel', (e) => {
       const cell = e.target.closest('.cell');
@@ -194,9 +200,8 @@ function reroll() {
   if (state.phase === 'deploy') return;
   restoreStageStartDestroyed();
   prepareStage(state);
-  state.phase = 'roll';
   selectedDieId = null;
-  save(); render();
+  rollOneBatch();
 }
 
 function gotoPhase(phase) {
@@ -205,16 +210,15 @@ function gotoPhase(phase) {
   } else if (phase === 'roll') {
     if (state.phase === 'deploy') return;
     prepareStage(state);
-    state.phase = 'roll';
+    rollOneBatch();
   } else if (phase === 'assign') {
     if (state.phase === 'deploy') return;
-    reassignStage();
-    state.phase = 'manual';
+    reassignCurrentBatch();
   } else if (phase === 'manual') {
     if (state.phase === 'deploy') return;
     state.phase = 'manual';
   } else if (phase === 'settle') {
-    if (state.phase === 'deploy' || state.phase === 'roll') return;
+    if (state.phase === 'deploy') return;
     state.phase = 'settle';
   }
   selectedDieId = null;
@@ -223,32 +227,48 @@ function gotoPhase(phase) {
 
 function onPrimaryAction() {
   if (state.phase === 'deploy') startAirStage();
-  else if (state.phase === 'roll') rollCurrentBatches();
-  else if (state.phase === 'manual' && state.stage === 'air') finishAirManual();
-  else if (state.phase === 'manual' && state.stage === 'surface') settle();
-  else if (state.phase === 'settle') newBattle(state.battlefield);
+  else if (state.phase === 'manual') {
+    const hasMore = SIDES.some((s) => state.sides[s].batchesRolled < state.sides[s].batchPlan.length);
+    if (hasMore) advanceBatch();
+    else if (state.stage === 'air') finishAirManual();
+    else settle();
+  } else if (state.phase === 'settle') newBattle(state.battlefield);
 }
 
 function startAirStage() {
   snapshotStageStart();
   state.stage = 'air';
   prepareStage(state);
-  state.phase = 'roll';
   log('空战阶段开始');
-  rollCurrentBatches();
+  rollOneBatch();
 }
 
-function rollCurrentBatches() {
+function rollOneBatch() {
   const order = rollOrderSides();
-  let rolled = 0;
   for (const side of order) {
     const r = rollNextBatch(state, side);
-    if (r) { rolled += 1; log(sideName(side) + ' 第 ' + (r.batchIndex + 1) + ' 批：' + r.size + ' 骰，命中组 ' + r.groups.length + '，作废 ' + r.missIds.length); }
+    if (r) log(sideName(side) + ' 第 ' + (r.batchIndex + 1) + ' 批：' + r.size + ' 骰，命中组 ' + r.groups.length + '，作废 ' + r.missIds.length);
   }
-  const allDone = SIDES.every((s) => state.sides[s].batchesRolled >= state.sides[s].batchPlan.length);
-  if (allDone) {
-    state.phase = 'manual';
-    log('本阶段掷骰完成，进入手动调整');
+  state.phase = 'manual';
+  save(); render();
+}
+
+function advanceBatch() {
+  for (const side of SIDES) {
+    const s = state.sides[side];
+    const b = Math.max(0, s.batchesRolled - 1);
+    const ids = s.dice.filter((d) => d.batch === b && (d.status === 'miss' || d.status === 'pending')).map((d) => d.id);
+    if (ids.length) autoAssign(state, side, ids, b, true);
+  }
+  rollOneBatch();
+}
+
+function reassignCurrentBatch() {
+  for (const side of SIDES) {
+    const s = state.sides[side];
+    const b = Math.max(0, s.batchesRolled - 1);
+    const ids = s.dice.filter((d) => d.batch === b && (d.status === 'miss' || d.status === 'pending')).map((d) => d.id);
+    if (ids.length) autoAssign(state, side, ids, b, true);
   }
   save(); render();
 }
@@ -264,9 +284,8 @@ function startSurfaceStage() {
   snapshotStageStart();
   state.stage = 'surface';
   prepareStage(state);
-  state.phase = 'roll';
   log(state.battlefield === 'land' ? '陆面阶段开始' : '海面阶段开始');
-  rollCurrentBatches();
+  rollOneBatch();
 }
 
 function settle() {
@@ -364,13 +383,9 @@ function onCellClick(side, nation, unit) {
     setCurrentCell(side, nation, unit);
     save(); render();
   } else if (state.phase === 'manual') {
-    const die = selectedDie();
-    if (die) {
-      // 改绑：本版先以“取消命中 + 重新自动分配”实现；单骰改绑下一版接入
-      return;
-    }
-    // 点击被击毁的格子 = 取消最近一个指向该格子的命中组
-    cancelLastGroupOn(side, nation, unit);
+    const attacker = side === 'axis' ? 'allied' : 'axis';
+    const b = Math.max(0, state.sides[attacker].batchesRolled - 1);
+    assignGroupToCell(state, attacker, nation, unit, b);
     save(); render();
   } else if (state.phase === 'settle') {
     adjustDestroyed(side, nation, unit, 1);
@@ -488,10 +503,12 @@ function phaseReached() {
 function renderPrimaryAction() {
   const btn = $('#primary-action');
   if (state.phase === 'deploy') btn.textContent = '进入空战阶段';
-  else if (state.phase === 'roll') btn.textContent = '掷下一批';
-  else if (state.phase === 'manual' && state.stage === 'air') btn.textContent = (state.battlefield === 'land' ? '进入陆面阶段' : '进入海面阶段');
-  else if (state.phase === 'manual' && state.stage === 'surface') btn.textContent = '结算';
-  else if (state.phase === 'settle') btn.textContent = '开始新战斗';
+  else if (state.phase === 'manual') {
+    const hasMore = SIDES.some((s) => state.sides[s].batchesRolled < state.sides[s].batchPlan.length);
+    if (hasMore) btn.textContent = '下一批';
+    else if (state.stage === 'air') btn.textContent = (state.battlefield === 'land' ? '进入陆面阶段' : '进入海面阶段');
+    else btn.textContent = '结算';
+  } else if (state.phase === 'settle') btn.textContent = '开始新战斗';
 }
 
 function renderView() {
@@ -787,7 +804,7 @@ function renderDice(side) {
   if (side === 'axis') html.push('<div class="dice-row">' + batches + overview + '</div>');
   else html.push('<div class="dice-row">' + overview + batches + '</div>');
 
-  if (state.phase === 'roll' && s.batchPlan.length) {
+  if (state.phase === 'manual' && s.batchPlan.length) {
     html.push('<span class="hint">本阶段应掷 ' + s.batchPlan.join('+') + ' 骰 · 已完成 ' + s.batchesRolled + '/' + s.batchPlan.length + ' 批</span>');
   }
   if (state.strategicBombing && state.strategicBombing[side] && state.strategicBombing[side].length) {
@@ -796,9 +813,6 @@ function renderDice(side) {
       html.push('<span class="die" title="' + COLOR_LABELS[c] + '"><img src="./assets/dice_' + c + '.png" alt="' + COLOR_LABELS[c] + '"></span>');
     }
     html.push('</div>');
-  }
-  if (state.phase === 'manual' && s.dice.some((d) => d.status === 'pending')) {
-    html.push('<button class="btn" data-reassign="' + side + '" type="button">重新自动分配待分配骰子</button>');
   }
   box.innerHTML = html.join('');
 
@@ -810,22 +824,7 @@ function renderDice(side) {
     setTimeout(() => { for (const d of freshDice) delete d.fresh; }, totalMs);
   }
 
-  box.querySelectorAll('.die.is-pending').forEach((el) => {
-    el.addEventListener('click', () => {
-      const id = el.dataset.die;
-      selectedDieId = selectedDieId === id ? null : id;
-      render();
-    });
-  });
-  box.querySelectorAll('[data-reassign]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const sideName0 = btn.dataset.reassign;
-      const s0 = state.sides[sideName0];
-      const ids = s0.dice.filter((d) => d.status === 'pending').map((d) => d.id);
-      if (ids.length) { autoAssign(state, sideName0, ids); log('重新自动分配 ' + sideName(sideName0)); }
-      save(); render();
-    });
-  });
+
 }
 
 function gutterTiles(side) {

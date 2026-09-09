@@ -1,7 +1,7 @@
 // 确定性自检：规则数据 + 战斗引擎
 import { D12_FACES } from '../js/data/rules-data.js';
 import { nationsFor } from '../js/data/rules-data.js';
-import { createBattle, diceCountFor, forceAdvantage, autoAssign, cancelGroup } from '../js/modules/engine.js';
+import { createBattle, diceCountFor, forceAdvantage, autoAssign, cancelGroup, assignGroupToCell, revertGroupForCell } from '../js/modules/engine.js';
 
 let failures = 0;
 function check(name, fn) {
@@ -124,6 +124,24 @@ check('压力：伤亡点数与 Zone', () => {
   if (casualtyStress(p, 'germany') !== 1) throw new Error('击杀分压力应为 1');
   if (totalStress(p, 'germany') !== 1) throw new Error('总压力应为 1');
   if (zoneFor(p, 'germany') !== 0) throw new Error('德国阈值 6，1 压力应仍在白区');
+});
+
+check('手动左键分配与右键回退', () => {
+  const s = createBattle('sea');
+  s.stage = 'surface';
+  s.sides.axis.deployed.germany.submarine = 1; // 双方各 1 海军类型，无兵力优势
+  s.sides.allied.deployed.uk.submarine = 1;
+  s.sides.axis.dice.push(
+    { id: 'd1', color: 'yellow', batch: 0, status: 'miss', groupId: null },
+    { id: 'd2', color: 'black', batch: 0, status: 'miss', groupId: null },
+  );
+  const g = assignGroupToCell(s, 'axis', 'uk', 'submarine', 0);
+  if (!g) throw new Error('应能手动分配');
+  if (s.sides.allied.destroyed.uk.submarine !== 1) throw new Error('潜艇应被击毁');
+  const rv = revertGroupForCell(s, 'axis', 'uk', 'submarine', 0);
+  if (!rv) throw new Error('应能回退');
+  if (s.sides.allied.destroyed.uk.submarine !== 0) throw new Error('潜艇应回退');
+  if (!s.sides.axis.dice.every((d) => d.status === 'pending')) throw new Error('骰子应回退为手动取消');
 });
 
 if (failures > 0) {

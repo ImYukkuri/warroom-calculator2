@@ -214,13 +214,17 @@ body {
 .dice-count span { color: var(--muted); font-size: 15px; }
 .dice-count b { font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; }
 
-.dice-batch { display: flex; flex-wrap: wrap; gap: 9px; align-items: center; width: 100%; padding: 6px 0; }
+.dice-batch { display: flex; flex-wrap: nowrap; gap: 6px; align-items: center; width: 100%; padding: 6px 0; }
 .dice-batch + .dice-batch { border-top: 1px dashed var(--line-strong); }
 .batch-label { color: var(--muted); font-size: 14px; margin-right: 6px; }
 
 .die {
   position: relative;
-  width: 54px; height: 54px;
+  aspect-ratio: 1 / 1;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 54px;
+  height: auto;
   border-radius: 7px;
   display: inline-grid; place-items: center;
   border: 1px solid rgba(255,255,255,0.28);

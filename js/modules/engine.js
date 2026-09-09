@@ -187,8 +187,26 @@ function orderTargets(targets, state, enemySide) {
   }
 }
 
-// 对本方一批待分配骰子做自动分配；返回本批新增的组与作废骰子 id
-export function autoAssign(state, side, diceIds) {
+// 骰子组合优先级：C=匹配色 W=白 B=黑
+function pickGroupDice(byColor, color, needed, isSub) {
+  const combos = needed === 3
+    ? [[3, 0, 0], [2, 1, 0], [2, 0, 1], [1, 1, 1], [1, 0, 2], [0, 1, 2], [0, 0, 3]]
+    : [[2, 0, 0], [1, 1, 0], [1, 0, 1], [0, 0, 2], [0, 1, 1]];
+  for (const [c, w, b] of combos) {
+    if (isSub && w > 0) continue;
+    if (byColor[color].length >= c && byColor.white.length >= w && byColor.black.length >= b) {
+      const picked = [];
+      picked.push(...byColor[color].splice(0, c));
+      picked.push(...byColor.white.splice(0, w));
+      picked.push(...byColor.black.splice(0, b));
+      return picked;
+    }
+  }
+  return null;
+}
+
+// 自动分配（skipEscape 用于“下一批前重跑”时跳过潜艇逃离）
+export function autoAssign(state, side, diceIds, batchIndex, skipEscape) {
   const field = state.battlefield;
   const enemySide = other(side);
   const sideState = state.sides[side];
@@ -208,26 +226,17 @@ export function autoAssign(state, side, diceIds) {
   }
 
   const groups = [];
+  const orderMap = {};
   const priority = ['red', 'green', 'blue', 'yellow'];
   for (const color of priority) {
     for (const t of targets.filter(function (x) { return x.color === color; })) {
       while (t.remaining > 0) {
         const needed = t.hitsRequired;
         const isSub = t.unit === 'submarine';
-        const whiteCap = isSub ? 0 : Math.min(1, byColor.white.length);
-        const base = byColor[color].length + byColor.black.length;
-        if (base + whiteCap < needed) break;
-
-        const picked = [];
-        picked.push(...byColor[color].splice(0, needed - picked.length));
-        picked.push(...byColor.black.splice(0, needed - picked.length));
-        if (!isSub && picked.length < needed) {
-          picked.push(...byColor.white.splice(0, needed - picked.length));
-        }
-        if (picked.length !== needed) {
-          // 理论上不会发生；防御性放回
-          break;
-        }
+        const picked = pickGroupDice(byColor, color, needed, isSub);
+        if (!picked) break;
+        const key = t.nation + '|' + t.unit;
+        orderMap[key] = (orderMap[key] || 0) + 1;
         const group = {
           id: nextId('hit'),
           targetNation: t.nation,
@@ -235,6 +244,8 @@ export function autoAssign(state, side, diceIds) {
           color,
           needed,
           diceIds: picked.map(function (d) { return d.id; }),
+          batch: batchIndex,
+          order: orderMap[key],
         };
         for (const d of picked) {
           d.status = 'assigned';
@@ -249,13 +260,11 @@ export function autoAssign(state, side, diceIds) {
     }
   }
 
-  // 剩余未分配骰子作废
   for (const color of ['yellow', 'blue', 'green', 'red', 'black', 'white']) {
     for (const d of byColor[color]) d.status = 'miss';
   }
 
-  // 潜艇逃离：仅海战海面阶段；每批结算后，黄色骰子未配对剩奇数个时逃 1 艘（从存活剔除）
-  if (field === 'sea' && state.stage === 'surface') {
+  if (!skipEscape && field === 'sea' && state.stage === 'surface') {
     const yellowMiss = diceIds.filter(function (id) {
       const d = sideState.dice.find(function (x) { return x.id === id; });
       return d && d.color === 'yellow' && d.status === 'miss';
@@ -274,6 +283,74 @@ export function autoAssign(state, side, diceIds) {
   return { groups, missIds: sideState.dice.filter(function (d) { return d.status === 'miss' && diceIds.includes(d.id); }).map(function (d) { return d.id; }) };
 }
 
+// 手动右键：回退该单元格最早的一组（FIFO）
+export function revertGroupForCell(state, side, nation, unit, batchIndex) {
+  const s = state.sides[side];
+  const targetSide = other(side);
+  const destroyed = state.sides[targetSide].destroyed[nation][unit] || 0;
+  if (destroyed <= 0) return null;
+  const groups = s.groups.filter(function (g) {
+    return g.targetNation === nation && g.targetUnit === unit && g.batch === batchIndex;
+  });
+  if (!groups.length) return null;
+  groups.sort(function (a, b) { return (a.order || 0) - (b.order || 0); });
+  const group = groups[0];
+  const idx = s.groups.indexOf(group);
+  if (idx < 0) return null;
+  s.groups.splice(idx, 1);
+  for (const dieId of group.diceIds) {
+    const die = s.dice.find(function (d) { return d.id === dieId; });
+    if (die) { die.status = 'pending'; die.groupId = null; delete die.fresh; delete die.assignOrder; }
+  }
+  state.sides[targetSide].destroyed[nation][unit] = Math.max(0, destroyed - 1);
+  return group;
+}
+
+// 手动左键：从当前批次未分配骰子池凑一组，分配并击毁 1 单位
+export function assignGroupToCell(state, side, nation, unit, batchIndex) {
+  const s = state.sides[side];
+  const targetSide = other(side);
+  const meta = UNIT_META[unit];
+  let alive = (state.sides[targetSide].deployed[nation][unit] || 0) - (state.sides[targetSide].destroyed[nation][unit] || 0);
+  if (unit === 'submarine') alive -= (state.sides[targetSide].escaped[nation] || 0);
+  if (alive <= 0) return null;
+
+  const needed = meta.hitsRequired;
+  const color = meta.color;
+  const isSub = unit === 'submarine';
+  const disadvantaged = isDisadvantaged(state, side);
+  const byColor = { yellow: [], blue: [], green: [], red: [], black: [], white: [] };
+  for (const d of s.dice) {
+    if (d.batch !== batchIndex) continue;
+    if (d.status !== 'miss' && d.status !== 'pending') continue;
+    if (disadvantaged && (d.color === 'black' || d.color === 'white')) continue;
+    byColor[d.color].push(d);
+  }
+  const picked = pickGroupDice(byColor, color, needed, isSub);
+  if (!picked) return null;
+
+  const existing = s.groups.filter(function (g) { return g.targetNation === nation && g.targetUnit === unit && g.batch === batchIndex; });
+  const group = {
+    id: nextId('hit'),
+    targetNation: nation,
+    targetUnit: unit,
+    color,
+    needed,
+    diceIds: picked.map(function (d) { return d.id; }),
+    batch: batchIndex,
+    order: existing.length + 1,
+  };
+  for (const d of picked) {
+    d.status = 'assigned';
+    d.groupId = group.id;
+    d.fresh = true;
+    d.assignOrder = s.groups.length;
+  }
+  s.groups.push(group);
+  state.sides[targetSide].destroyed[nation][unit] = (state.sides[targetSide].destroyed[nation][unit] || 0) + 1;
+  return group;
+}
+
 // 掷下一批并自动分配；批次掷完返回 null
 export function rollNextBatch(state, side, rng = Math.random) {
   const s = state.sides[side];
@@ -286,7 +363,7 @@ export function rollNextBatch(state, side, rng = Math.random) {
   });
   s.dice.push(...dice);
   s.batchesRolled += 1;
-  const result = autoAssign(state, side, dice.map(function (d) { return d.id; }));
+  const result = autoAssign(state, side, dice.map(function (d) { return d.id; }), batchIndex, false);
   result.batchIndex = batchIndex;
   result.size = size;
   return result;
