@@ -1,9 +1,9 @@
 import {
-  ALLIANCE_OF, COLOR_LABELS, COLOR_ORDER, FIELD_UNITS, NATIONS, SIDES, STRATEGIC_BOMBING_RESULTS,
+  ALLIANCE_OF, COLOR_LABELS, COLOR_ORDER, FIELD_UNITS, NATION_TAGS, NATIONS, SIDES, STRATEGIC_BOMBING_RESULTS,
   UNIT_IMAGE, UNIT_META, nationsFor, unitIdsFor,
 } from './data/rules-data.js';
 import {
-  CASUALTY_FACTORS, NATION_STRESS_THRESHOLDS,
+  CASUALTY_CONVERSION_TABLE, CASUALTY_FACTORS, NATION_STRESS_THRESHOLDS,
   ZONES, ZONE_EFFECTS, addCasualties, adjustScore, casualtyPoints, casualtyStress,
   createPressureState, newRound, roundCasualtyOverview, thisRoundAdded, totalStress, zoneFor,
 } from './modules/pressure.js';
@@ -562,7 +562,7 @@ function renderSettle() {
       thisBattlePts += Math.max(0, Y + Z) * factor;
       cells.push({ uid, total, z: Z, x: X, y: Y });
     }
-    html += '<tr><td class="nation-cell">' + n.name + '</td>';
+    html += '<tr><td class="nation-cell"><img class="settle-flag" src="./assets/' + n.flag + '" alt="' + NATION_TAGS[n.id] + '" title="' + NATION_TAGS[n.id] + '"></td>';
     html += '<td class="readonly">' + totalPts + '</td>';
     html += '<td class="readonly">' + thisBattlePts + '</td>';
     for (const c of cells) {
@@ -609,10 +609,9 @@ function renderPressure() {
   if (!pressure || !pressure.nations || !pressure.roundCasualties) pressure = createPressureState();
   let html = '<div class="pressure-head"><h3>压力系统</h3><div class="pressure-actions"><button class="btn" id="new-round" type="button">新回合</button><button class="btn" id="pressure-new-battle" type="button">开始新战斗</button></div></div>';
   html += '<table class="pmatrix"><thead><tr><th></th>';
-  for (const n of NATIONS) html += '<th><img src="./assets/' + n.flag + '" alt="">' + n.name + '</th>';
+  for (const n of NATIONS) html += '<th><img src="./assets/' + n.flag + '" alt="">' + NATION_TAGS[n.id] + '</th>';
   html += '</tr></thead><tbody>';
   const rows = [
-    ['国家名称', (n) => n.name],
     ['压力阈值', (n) => NATION_STRESS_THRESHOLDS[n.id]],
     ['总压力值', (n) => totalStress(pressure, n.id)],
     ['上回合压力', (n) => pressure.nations[n.id].previousRoundStress],
@@ -626,13 +625,15 @@ function renderPressure() {
     html += '<tr><td class="row-label">' + rows[r][0] + '</td>';
     for (const n of NATIONS) {
       const value = rows[r][1](n);
-      if (r === 2) {
+      if (r === 1) {
         const z = zoneFor(pressure, n.id);
         html += '<td class="zone-cell zone-' + z + '" data-nation="' + n.id + '" data-zone="' + z + '">' + value + '</td>';
-      } else if (r === 6) {
+      } else if (r === 4) {
+        html += '<td class="casualty-tip" data-nation="' + n.id + '">' + value + '</td>';
+      } else if (r === 5) {
         html += '<td class="overview-cell" data-nation="' + n.id + '">' + value + '</td>';
-      } else if (r === 7 || r === 8) {
-        const kind = r === 7 ? 'territory' : 'medals';
+      } else if (r === 6 || r === 7) {
+        const kind = r === 6 ? 'territory' : 'medals';
         html += '<td class="editable-cell" data-nation="' + n.id + '" data-kind="' + kind + '">' + value + '</td>';
       } else {
         html += '<td>' + value + '</td>';
@@ -651,6 +652,12 @@ function bindPressureEvents(box) {
     cell.addEventListener('click', () => {
       const z = Number(cell.dataset.zone);
       showTooltip(cell, '<div class="tt-title">第 ' + (z + 1) + ' 压力阶段 · ' + ZONES[z] + '</div><div class="tt-body">' + ZONE_EFFECTS[z] + '</div>');
+    });
+  });
+  box.querySelectorAll('.casualty-tip').forEach((cell) => {
+    cell.addEventListener('click', () => {
+      const lines = CASUALTY_CONVERSION_TABLE.map((it) => it[0] + ' 伤亡点 → ' + it[1] + ' 压力');
+      showTooltip(cell, '<div class="tt-title">伤亡点数 → 压力阈值</div><div class="tt-body">' + lines.join('<br>') + '</div>');
     });
   });
   box.querySelectorAll('.overview-cell').forEach((cell) => {
@@ -704,7 +711,7 @@ function renderSide(side) {
 function renderFlags(side) {
   const box = side === 'axis' ? $('#axis-flags') : $('#allied-flags');
   const nations = nationsFor(state.battlefield).filter((n) => ALLIANCE_OF[n.id] === side);
-  box.innerHTML = nations.map((n) => '<img src="./assets/' + n.flag + '" alt="' + n.name + '" title="' + n.name + '">').join('');
+  box.innerHTML = nations.map((n) => '<img src="./assets/' + n.flag + '" alt="' + NATION_TAGS[n.id] + '" title="' + NATION_TAGS[n.id] + '">').join('');
 }
 
 function renderAdvantages(side) {
@@ -845,7 +852,7 @@ function renderGrid(side) {
   // 国家 × 单位：国家做列（横轴），单位做行（纵轴）；骰数总览只保留靠页面中心一侧
   let grid = '<div class="grid-scroll"><table class="grid"><thead><tr><th class="corner"></th>';
   for (const n of nations) {
-    grid += '<th class="nation-head"><img class="th-flag-fill" src="./assets/' + n.flag + '" alt=""><span class="nation-name">' + n.name + '</span></th>';
+    grid += '<th class="nation-head"><img class="th-flag-fill" src="./assets/' + n.flag + '" alt=""><span class="nation-name">' + NATION_TAGS[n.id] + '</span></th>';
   }
   grid += '</tr></thead><tbody>';
   for (const sec of sections) {
@@ -921,7 +928,7 @@ function renderSettingsPanel() {
   const sel = $('#set-target-nation');
   const opts = ['<option value="">无（自动）</option>'];
   for (const n of nationsFor(state.battlefield)) {
-    opts.push('<option value="' + n.id + '"' + (state.settings.targetNation === n.id ? ' selected' : '') + '>' + n.name + '</option>');
+    opts.push('<option value="' + n.id + '"' + (state.settings.targetNation === n.id ? ' selected' : '') + '>' + NATION_TAGS[n.id] + '</option>');
   }
   sel.innerHTML = opts.join('');
 }
@@ -945,8 +952,7 @@ function logCatLabel(kind) {
 }
 
 function pressureNationName(id) {
-  const n = NATIONS.find((x) => x.id === id);
-  return n ? n.name : id;
+  return NATION_TAGS[id] || id;
 }
 
 // ---------- 工具 ----------
@@ -957,8 +963,7 @@ function rollOrderSides() {
 }
 function sideName(side) { return side === 'axis' ? '轴心' : '同盟'; }
 function nationName(id) {
-  const n = nationsFor(state.battlefield).find((x) => x.id === id);
-  return n ? n.name : id;
+  return NATION_TAGS[id] || id;
 }
 function log(msg) { state.log.push(new Date().toLocaleTimeString() + ' ' + msg); }
 function toggleLog() { const p = $('#log-panel'); p.open = !p.open; }

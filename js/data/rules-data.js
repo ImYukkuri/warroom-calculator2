@@ -48,6 +48,17 @@ export const ALLIANCE_OF = Object.freeze(
   NATIONS.reduce(function (acc, n) { acc[n.id] = n.alliance; return acc; }, {})
 );
 
+// 国家标签（敏感性处理：日志/表头用 tag 代替中文国名）
+export const NATION_TAGS = Object.freeze({
+  germany: 'GER',
+  italy: 'ITA',
+  japan: 'JPN',
+  uk: 'UK',
+  usa: 'USA',
+  ussr: 'USR',
+  china: 'CHN',
+});
+
 // 兵种元数据：颜色、命中所需骰面数（普通 2 / 主力舰 3）、类别
 export const UNIT_META = Object.freeze({
   fighter: { name: '战斗机', category: 'air', color: 'green', hitsRequired: 2 },

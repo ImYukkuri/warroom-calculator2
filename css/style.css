@@ -315,6 +315,7 @@ body {
 .settle-table th, .settle-table td { border: 1px solid var(--line); padding: 13px 14px; text-align: center; font-size: 19px; }
 .settle-table th { background: var(--panel-2); color: var(--muted); font-size: 16px; }
 .settle-table .nation-cell { font-weight: 700; background: var(--panel-2); }
+.settle-flag { width: 44px; height: auto; border-radius: 3px; vertical-align: middle; }
 .settle-table .readonly { color: var(--accent); font-weight: 800; font-size: 23px; }
 .settle-unit { cursor: pointer; min-width: 90px; }
 .settle-unit:hover { background: #26303c; }
@@ -335,7 +336,7 @@ body {
 .pmatrix th { background: var(--panel-2); font-size: 17px; }
 .pmatrix th img { display: block; width: 48px; margin: 0 auto 6px; border-radius: 4px; }
 .pmatrix .row-label { text-align: left; color: var(--muted); white-space: nowrap; font-size: 16px; }
-.pmatrix .zone-cell, .pmatrix .overview-cell, .pmatrix .editable-cell { cursor: pointer; }
+.pmatrix .zone-cell, .pmatrix .overview-cell, .pmatrix .editable-cell, .pmatrix .casualty-tip { cursor: pointer; }
 .pmatrix .editable-cell:hover, .pmatrix .overview-cell:hover { background: #26303c; }
 .zone-cell { font-weight: 800; font-size: 23px; }
 .zone-0 { background: #2a3340; color: #e9e4d6; }

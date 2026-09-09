@@ -27,6 +27,11 @@ const CONVERSION = Object.freeze([
   [0, 18, 0], [19, 34, 1], [35, 50, 2], [51, 68, 3], [69, 88, 4], [89, 108, 5], [109, Infinity, 6],
 ]);
 
+// 供 tooltip 展示的换算表
+export const CASUALTY_CONVERSION_TABLE = Object.freeze([
+  ['0–18', '0'], ['19–34', '1'], ['35–50', '2'], ['51–68', '3'], ['69–88', '4'], ['89–108', '5'], ['109+', '6'],
+]);
+
 export function casualtyPointsToStress(points) {
   for (const [lo, hi, stress] of CONVERSION) {
     if (points >= lo && points <= hi) return stress;
